@@ -160,6 +160,11 @@ function CheckinCard({ checkIn, previousCheckIn }: { checkIn: CheckIn; previousC
           <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
           <p className="text-sm font-medium capitalize">{dateStr}</p>
         </div>
+        {checkIn.phase && (
+          <span className="text-xs rounded-full border px-2 py-0.5 text-muted-foreground">
+            Fase {checkIn.phase}
+          </span>
+        )}
       </div>
 
       {/* Body metrics */}
@@ -209,6 +214,42 @@ function CheckinCard({ checkIn, previousCheckIn }: { checkIn: CheckIn; previousC
           {checkIn.mood && <ScoreBar value={checkIn.mood} label="Ánimo" />}
           {checkIn.nutrition_adherence && <ScoreBar value={checkIn.nutrition_adherence} label="Adherencia nutrición" />}
           {checkIn.training_adherence && <ScoreBar value={checkIn.training_adherence} label="Adherencia entrenamiento" />}
+        </div>
+      )}
+
+      {/* Qualitative data */}
+      {(checkIn.protocol_adherence || checkIn.daily_energy || checkIn.cravings || checkIn.digestion || checkIn.difficulties) && (
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+          {checkIn.protocol_adherence && (
+            <div className="rounded-lg bg-muted/30 px-3 py-2">
+              <p className="text-xs text-muted-foreground">Adhesión al protocolo</p>
+              <p className="font-medium">{checkIn.protocol_adherence}</p>
+            </div>
+          )}
+          {checkIn.daily_energy && (
+            <div className="rounded-lg bg-muted/30 px-3 py-2">
+              <p className="text-xs text-muted-foreground">Energía diaria</p>
+              <p className="font-medium">{checkIn.daily_energy}</p>
+            </div>
+          )}
+          {checkIn.cravings && (
+            <div className="rounded-lg bg-muted/30 px-3 py-2">
+              <p className="text-xs text-muted-foreground">Antojos</p>
+              <p className="font-medium">{checkIn.cravings === 'TRUE' ? 'Sí' : checkIn.cravings === 'FALSE' ? 'No' : checkIn.cravings}</p>
+            </div>
+          )}
+          {checkIn.digestion && (
+            <div className="rounded-lg bg-muted/30 px-3 py-2">
+              <p className="text-xs text-muted-foreground">Digestión</p>
+              <p className="font-medium">{checkIn.digestion}</p>
+            </div>
+          )}
+          {checkIn.difficulties && (
+            <div className="rounded-lg bg-muted/30 px-3 py-2 sm:col-span-2">
+              <p className="text-xs text-muted-foreground">Dificultades</p>
+              <p className="font-medium">{checkIn.difficulties}</p>
+            </div>
+          )}
         </div>
       )}
 

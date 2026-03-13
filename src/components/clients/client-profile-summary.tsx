@@ -1,4 +1,4 @@
-import { User, MapPin, Phone, Mail, Ruler, Weight, Activity, Target, AlertCircle, Calendar } from 'lucide-react'
+import { User, MapPin, Phone, Mail, Ruler, Weight, Activity, Target, AlertCircle, Calendar, Trophy, Dumbbell, Moon, Zap, Brain, FileText, Image } from 'lucide-react'
 import { PHASE_LABELS } from '@/lib/constants'
 import type { Client, NutritionPhase } from '@/lib/types'
 
@@ -33,11 +33,23 @@ function InfoRow({ icon: Icon, label, value, fallback }: { icon: React.ElementTy
 
 export function ClientProfileSummary({ client }: ClientProfileSummaryProps) {
   const age = client.birth_date ? calculateAge(client.birth_date) : null
+  const cleanMotivation = client.motivation?.replace(/\*/g, '') || null
 
   return (
     <div className="rounded-xl border bg-card shadow-sm">
-      <div className="border-b px-6 py-4">
+      <div className="border-b px-6 py-4 flex items-center justify-between">
         <h3 className="text-sm font-medium text-muted-foreground">Perfil del Cliente</h3>
+        {client.initial_photo_url && (
+          <a
+            href={client.initial_photo_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+          >
+            <Image className="h-3.5 w-3.5" />
+            Foto inicial
+          </a>
+        )}
       </div>
 
       <div className="grid gap-0 divide-y sm:grid-cols-2 sm:divide-y-0 sm:divide-x">
@@ -98,6 +110,41 @@ export function ClientProfileSummary({ client }: ClientProfileSummaryProps) {
               </div>
             </>
           )}
+
+          {(client.energy_level_initial || client.stress_level_initial || client.sleep_hours_avg) && (
+            <>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2 mt-4">Estado Inicial</p>
+              <div className="flex flex-wrap gap-3">
+                {client.energy_level_initial && (
+                  <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
+                    <Zap className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Energía</p>
+                      <p className="text-sm font-medium">{client.energy_level_initial}/10</p>
+                    </div>
+                  </div>
+                )}
+                {client.stress_level_initial && (
+                  <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
+                    <Brain className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Estrés</p>
+                      <p className="text-sm font-medium">{client.stress_level_initial}/10</p>
+                    </div>
+                  </div>
+                )}
+                {client.sleep_hours_avg && (
+                  <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
+                    <Moon className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Sueño</p>
+                      <p className="text-sm font-medium">{client.sleep_hours_avg}h</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Program Info */}
@@ -105,26 +152,59 @@ export function ClientProfileSummary({ client }: ClientProfileSummaryProps) {
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Programa y Objetivos</p>
 
           <InfoRow
-            icon={Activity}
+            icon={Dumbbell}
             label="Nivel de entrenamiento"
             value={client.training_level}
           />
           <InfoRow
             icon={Target}
             label="Motivación"
-            value={client.motivation}
+            value={cleanMotivation}
           />
           <InfoRow
             icon={Target}
             label="Objetivos"
             value={client.goals}
           />
+
+          {client.has_event && client.event_name && (
+            <InfoRow
+              icon={Trophy}
+              label="Evento objetivo"
+              value={
+                client.event_date
+                  ? `${client.event_name} (${new Date(client.event_date + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })})`
+                  : client.event_name
+              }
+            />
+          )}
+
+          {client.diagnosis === 'TRUE' && client.diagnosis_detail && (
+            <div className="flex items-start gap-3 py-2">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Diagnóstico médico</p>
+                <p className="text-sm text-amber-700">{client.diagnosis_detail}</p>
+              </div>
+            </div>
+          )}
+
           {client.medical_notes && (
             <div className="flex items-start gap-3 py-2">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
               <div className="min-w-0">
                 <p className="text-xs text-muted-foreground">Notas médicas</p>
                 <p className="text-sm text-amber-700">{client.medical_notes}</p>
+              </div>
+            </div>
+          )}
+
+          {client.onboarding_notes && (
+            <div className="flex items-start gap-3 py-2">
+              <FileText className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Notas del onboarding</p>
+                <p className="text-sm">{client.onboarding_notes}</p>
               </div>
             </div>
           )}

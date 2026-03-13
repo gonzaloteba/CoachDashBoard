@@ -37,6 +37,18 @@ export interface Client {
   motivation: string | null
   medical_notes: string | null
   goals: string | null
+  diagnosis: string | null
+  diagnosis_detail: string | null
+  has_event: boolean
+  event_name: string | null
+  event_date: string | null
+  training_days_per_week: number | null
+  sleep_hours_avg: number | null
+  energy_level_initial: number | null
+  stress_level_initial: number | null
+  initial_photo_url: string | null
+  onboarding_notes: string | null
+  onboarding_submitted_at: string | null
   onboarding_trainingpeaks: boolean
   onboarding_whatsapp_group: boolean
   onboarding_community_group: boolean
@@ -59,6 +71,14 @@ export interface CheckIn {
   training_adherence: number | null
   notes: string | null
   photo_urls: string[] | null
+  phase: number | null
+  protocol_adherence: string | null
+  daily_energy: string | null
+  cravings: string | null
+  digestion: string | null
+  difficulties: string | null
+  stress_level: number | null
+  sleep_hours: number | null
   created_at: string
 }
 
