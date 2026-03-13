@@ -17,14 +17,15 @@ function calculateAge(birthDate: string): number {
   return age
 }
 
-function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string | null | undefined }) {
-  if (!value) return null
+function InfoRow({ icon: Icon, label, value, fallback }: { icon: React.ElementType; label: string; value: string | null | undefined; fallback?: string }) {
+  const display = value || fallback || null
+  if (!display) return null
   return (
     <div className="flex items-start gap-3 py-2">
       <Icon className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-sm">{value}</p>
+        <p className={`text-sm ${!value ? 'text-muted-foreground italic' : ''}`}>{display}</p>
       </div>
     </div>
   )
@@ -54,18 +55,19 @@ export function ClientProfileSummary({ client }: ClientProfileSummaryProps) {
             label="Fecha de nacimiento"
             value={
               client.birth_date
-                ? `${new Date(client.birth_date).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })} (${age} años)`
+                ? `${new Date(client.birth_date + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })} (${age} años)`
                 : null
             }
+            fallback="Sin registro"
           />
-          <InfoRow icon={Phone} label="Teléfono" value={client.phone} />
-          <InfoRow icon={Mail} label="Email" value={client.email} />
-          <InfoRow icon={MapPin} label="Ubicación" value={client.location} />
+          <InfoRow icon={Phone} label="Teléfono" value={client.phone} fallback="Sin registro" />
+          <InfoRow icon={Mail} label="Email" value={client.email} fallback="Sin registro" />
+          <InfoRow icon={MapPin} label="Ubicación" value={client.location} fallback="Sin registro" />
 
           {(client.height_cm || client.initial_weight_kg || client.initial_body_fat_pct) && (
             <>
               <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2 mt-4">Datos Físicos Iniciales</p>
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-3">
                 {client.height_cm && (
                   <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
                     <Ruler className="h-4 w-4 text-muted-foreground" />
@@ -136,12 +138,12 @@ export function ClientProfileSummary({ client }: ClientProfileSummaryProps) {
           <InfoRow
             icon={Calendar}
             label="Inicio"
-            value={new Date(client.start_date).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
+            value={new Date(client.start_date + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
           />
           <InfoRow
             icon={Calendar}
             label="Fin del programa"
-            value={new Date(client.end_date).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
+            value={new Date(client.end_date + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
           />
           <InfoRow
             icon={User}

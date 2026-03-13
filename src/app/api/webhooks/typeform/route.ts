@@ -42,6 +42,8 @@ export async function POST(request: NextRequest) {
 
     // Map answers by field ref
     const answerMap = new Map<string, unknown>()
+    const photoUrls: string[] = []
+
     for (const answer of answers) {
       const ref = answer.field?.ref
       if (ref) {
@@ -60,10 +62,22 @@ export async function POST(request: NextRequest) {
           case 'choice':
             value = answer.choice?.label
             break
+          case 'file_url':
+            value = answer.file_url
+            if (answer.file_url) photoUrls.push(answer.file_url)
+            break
           default:
             value = answer[answer.type]
         }
         answerMap.set(ref, value)
+      }
+    }
+
+    // Also check for photo refs explicitly (photos, progress_photo, foto_progreso)
+    for (const photoRef of ['photos', 'progress_photo', 'foto_progreso']) {
+      const photoVal = answerMap.get(photoRef)
+      if (typeof photoVal === 'string' && photoVal && !photoUrls.includes(photoVal)) {
+        photoUrls.push(photoVal)
       }
     }
 
@@ -82,6 +96,7 @@ export async function POST(request: NextRequest) {
       nutrition_adherence: answerMap.get('nutrition_adherence') as number | undefined || null,
       training_adherence: answerMap.get('training_adherence') as number | undefined || null,
       notes: answerMap.get('notes') as string | undefined || null,
+      photo_urls: photoUrls.length > 0 ? photoUrls : null,
     }
 
     const supabase = getAdminClient()
