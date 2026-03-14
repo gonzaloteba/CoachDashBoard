@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createHmac } from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import {
   CHECKIN_FORM_ID,
@@ -65,14 +66,28 @@ async function findClientByName(
 }
 
 export async function POST(request: NextRequest) {
-  // Verify webhook secret
-  const secret = request.headers.get('x-typeform-secret')
-  if (secret !== process.env.TYPEFORM_WEBHOOK_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
   try {
-    const payload = await request.json()
+    // Read raw body for signature verification
+    const rawBody = await request.text()
+
+    // Verify Typeform signature (HMAC SHA256)
+    const webhookSecret = process.env.TYPEFORM_WEBHOOK_SECRET
+    if (webhookSecret) {
+      const signature = request.headers.get('Typeform-Signature')
+      if (!signature) {
+        console.error('Missing Typeform-Signature header')
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      const expectedSig = 'sha256=' + createHmac('sha256', webhookSecret)
+        .update(rawBody)
+        .digest('base64')
+      if (signature !== expectedSig) {
+        console.error('Typeform signature mismatch', { received: signature, expected: expectedSig })
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+    }
+
+    const payload = JSON.parse(rawBody)
     const formResponse = payload.form_response
 
     if (!formResponse) {
