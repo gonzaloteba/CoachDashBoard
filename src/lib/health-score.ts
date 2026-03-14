@@ -1,6 +1,6 @@
-import { differenceInDays, startOfMonth, isAfter } from 'date-fns'
-import type { Client, CheckIn, Call, HealthScore } from './types'
-import { CALLS_PER_MONTH, CHECKIN_GRACE_DAYS } from './constants'
+import { differenceInDays } from 'date-fns'
+import type { Client, CheckIn, HealthScore } from './types'
+import { CHECKIN_GRACE_DAYS } from './constants'
 
 export function calculateHealthScore(
   client: Client,
@@ -30,7 +30,6 @@ export function calculateHealthScore(
   }
 
   // Calls analysis
-  const monthStart = startOfMonth(now)
   const dayOfMonth = now.getDate()
   // Expected calls so far: roughly 1 per week for the first 3 weeks
   const weeksInMonth = Math.min(Math.floor(dayOfMonth / 7), 3)

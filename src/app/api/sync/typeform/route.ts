@@ -1,113 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getAdminClient } from '@/lib/supabase/admin'
 import {
   CHECKIN_FORM_ID,
   AUDIT_FORM_ID,
   CHECKIN_FIRST_NAME_REF,
   CHECKIN_LAST_NAME_REF,
-  CHECKIN_FIELD_MAP,
   AUDIT_FIRST_NAME_REF,
   AUDIT_LAST_NAME_REF,
-  AUDIT_FIELD_MAP,
-  parsePhase,
-  ratingToTen,
-  parseSleepHours,
-  parseYesNoChoice,
 } from '@/lib/typeform-mappings'
+import {
+  extractValue,
+  findClientByName,
+  mapAuditFields,
+  buildCheckInData,
+} from '@/lib/typeform-helpers'
 
 const TYPEFORM_API_BASE = 'https://api.typeform.com'
-
-function getAdminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function extractValue(answer: any): unknown {
-  switch (answer.type) {
-    case 'number':
-      return answer.number
-    case 'text':
-      return answer.text
-    case 'boolean':
-      return answer.boolean
-    case 'choice':
-      return answer.choice?.label
-    case 'choices':
-      return answer.choices?.labels?.join(', ')
-    case 'file_url':
-      return answer.file_url
-    case 'url':
-      return answer.url
-    case 'phone_number':
-      return answer.phone_number
-    default:
-      return answer[answer.type]
-  }
-}
-
-/** Remove accents/diacritics for comparison */
-function removeAccents(str: string): string {
-  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-}
-
-async function findClientByName(
-  supabase: ReturnType<typeof getAdminClient>,
-  firstName: string,
-  lastName: string
-): Promise<{ id: string } | null> {
-  const fn = firstName.trim()
-  const ln = lastName.trim()
-
-  // 1. Try exact match (case-insensitive)
-  const { data: exact } = await supabase
-    .from('clients')
-    .select('id')
-    .ilike('first_name', fn)
-    .ilike('last_name', ln)
-    .limit(1)
-    .single()
-  if (exact) return exact
-
-  // 2. Fetch all clients and do fuzzy matching (accent-insensitive, partial last name)
-  const { data: allClients } = await supabase
-    .from('clients')
-    .select('id, first_name, last_name')
-
-  if (!allClients || allClients.length === 0) return null
-
-  const normFn = removeAccents(fn).toLowerCase()
-  const normLn = removeAccents(ln).toLowerCase()
-  // Extract first word of submitted last name for partial matching
-  const lnFirstWord = normLn.split(/\s+/)[0]
-
-  for (const client of allClients) {
-    const cFn = removeAccents(client.first_name || '').toLowerCase().trim()
-    const cLn = removeAccents(client.last_name || '').toLowerCase().trim()
-
-    // Match first name: exact, or first word matches (e.g. "Jesus" matches "Jesús Eduardo")
-    const fnMatch =
-      cFn === normFn ||
-      normFn === cFn.split(/\s+/)[0] ||
-      cFn === normFn.split(/\s+/)[0]
-
-    if (!fnMatch) continue
-
-    // Match last name: exact, starts with, or first word matches
-    const lnMatch =
-      cLn === normLn ||
-      normLn.startsWith(cLn) ||
-      cLn.startsWith(normLn) ||
-      cLn.split(/\s+/)[0] === lnFirstWord ||
-      cLn === lnFirstWord
-
-    if (lnMatch) return { id: client.id }
-  }
-
-  return null
-}
 
 /** Fetch all responses from a Typeform form (handles pagination) */
 async function fetchAllResponses(formId: string, token: string) {
@@ -142,7 +50,6 @@ async function fetchAllResponses(formId: string, token: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    // Auth: require CRON_SECRET or service role key
     const authHeader = request.headers.get('authorization')
     const { searchParams } = new URL(request.url)
     const secret = searchParams.get('secret') || authHeader?.replace('Bearer ', '')
@@ -186,7 +93,6 @@ export async function POST(request: NextRequest) {
         const client = await findClientByName(supabase, firstName, lastName)
 
         if (!client) {
-          // Auto-create
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const clientData: Record<string, any> = {
             first_name: firstName.trim(),
@@ -203,7 +109,6 @@ export async function POST(request: NextRequest) {
             results.audit.created++
           }
         } else {
-          // Update existing
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const updateData: Record<string, any> = { onboarding_submitted_at: submittedAt }
           mapAuditFields(answerMap, updateData)
@@ -255,7 +160,6 @@ export async function POST(request: NextRequest) {
 
         let client = await findClientByName(supabase, firstName, lastName)
         if (!client) {
-          // Auto-create client from check-in data
           const { data: newClient, error: createErr } = await supabase
             .from('clients')
             .insert({
@@ -275,44 +179,7 @@ export async function POST(request: NextRequest) {
           results.checkin.auto_created_clients.push(`${firstName} ${lastName}`)
         }
 
-        // Build check-in data
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const checkInData: Record<string, any> = {
-          client_id: client.id,
-          submitted_at: submittedAt,
-          typeform_response_id: responseId,
-        }
-        const photoUrls: string[] = []
-
-        for (const [fieldId, column] of Object.entries(CHECKIN_FIELD_MAP)) {
-          const value = answerMap.get(fieldId)
-          if (value === undefined || value === null) continue
-
-          switch (column) {
-            case 'phase':
-              checkInData[column] = parsePhase(value as string)
-              break
-            case 'energy_level':
-            case 'stress_level':
-              checkInData[column] = ratingToTen(value as number)
-              break
-            case 'sleep_hours':
-              checkInData[column] = parseSleepHours(value as string)
-              break
-            case 'cravings':
-              checkInData[column] = typeof value === 'boolean' ? value : true
-              break
-            case 'loss_of_control':
-              checkInData[column] = typeof value === 'string' ? parseYesNoChoice(value) : value
-              break
-            case 'photo_urls':
-              if (typeof value === 'string' && value) photoUrls.push(value)
-              break
-            default:
-              checkInData[column] = value
-          }
-        }
-        if (photoUrls.length > 0) checkInData.photo_urls = photoUrls
+        const checkInData = buildCheckInData(answerMap, client.id, submittedAt, responseId)
 
         const { error } = await supabase.from('check_ins').insert(checkInData)
         if (error) {
@@ -332,42 +199,5 @@ export async function POST(request: NextRequest) {
       { error: 'Internal server error', detail: (error as Error).message },
       { status: 500 }
     )
-  }
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapAuditFields(answerMap: Map<string, unknown>, data: Record<string, any>) {
-  for (const [fieldId, column] of Object.entries(AUDIT_FIELD_MAP)) {
-    const value = answerMap.get(fieldId)
-    if (value === undefined || value === null) continue
-
-    switch (column) {
-      case 'sleep_hours_avg': {
-        const num = parseFloat(String(value))
-        data[column] = isNaN(num) ? null : num
-        break
-      }
-      case 'training_days_per_week': {
-        const num = parseInt(String(value), 10)
-        data[column] = isNaN(num) ? null : num
-        break
-      }
-      case 'has_event':
-      case 'wakes_at_night':
-      case 'feels_rested':
-      case 'night_hunger':
-      case 'trains_fasted':
-        data[column] = typeof value === 'boolean' ? value : true
-        break
-      case 'sleep_quality_initial':
-      case 'energy_level_initial':
-        data[column] = typeof value === 'number' ? value : parseInt(String(value), 10)
-        break
-      case 'initial_photo_url':
-        if (typeof value === 'string' && value) data[column] = value
-        break
-      default:
-        data[column] = value
-    }
   }
 }

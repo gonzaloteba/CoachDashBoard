@@ -1,4 +1,4 @@
-import { User, MapPin, Phone, Mail, Ruler, Weight, Activity, Target, AlertCircle, Calendar, Trophy, Dumbbell, Moon, Zap, Brain, FileText, Image, Clock, Briefcase, Utensils, Coffee, BedDouble, Sun } from 'lucide-react'
+import { User, MapPin, Phone, Mail, Ruler, Weight, Activity, Target, AlertCircle, Calendar, Trophy, Dumbbell, Moon, Zap, Brain, FileText, Image as ImageIcon, Clock, Briefcase, Utensils, Coffee, BedDouble, Sun } from 'lucide-react'
 import { PHASE_LABELS } from '@/lib/constants'
 import type { Client, NutritionPhase } from '@/lib/types'
 
@@ -46,7 +46,7 @@ export function ClientProfileSummary({ client }: ClientProfileSummaryProps) {
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
           >
-            <Image className="h-3.5 w-3.5" />
+            <ImageIcon className="h-3.5 w-3.5" />
             Foto inicial
           </a>
         )}

@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { ALERT_TYPE_LABELS, SEVERITY_COLORS, SEVERITY_LABELS } from '@/lib/constants'
-import type { Alert, AlertSeverity, AlertType } from '@/lib/types'
+import type { Alert } from '@/lib/types'
 
 interface AlertListProps {
   alerts: (Alert & { client?: { first_name: string; last_name: string } })[]

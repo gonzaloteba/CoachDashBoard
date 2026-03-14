@@ -11,17 +11,6 @@ interface PhaseTrackerProps {
   phaseChangeDate: string | null
 }
 
-function getPhaseEndDate(startDate: string, phase: NutritionPhase): Date {
-  const start = new Date(startDate)
-  if (phase === 1) {
-    return new Date(start.getTime() + PHASE_DURATIONS_DAYS[1] * 86400000)
-  }
-  if (phase === 2) {
-    return new Date(start.getTime() + (PHASE_DURATIONS_DAYS[1] + PHASE_DURATIONS_DAYS[2]) * 86400000)
-  }
-  return new Date(start.getTime() + 90 * 86400000)
-}
-
 export function PhaseTracker({ currentPhase, startDate, endDate, phaseChangeDate }: PhaseTrackerProps) {
   const phases: NutritionPhase[] = [1, 2, 3]
   const now = new Date()
@@ -92,7 +81,6 @@ export function PhaseTracker({ currentPhase, startDate, endDate, phaseChangeDate
       {/* Phase indicators */}
       <div className="flex gap-2">
         {phases.map((phase) => {
-          const phaseEnd = getPhaseEndDate(startDate, phase)
           const daysInPhase = PHASE_DURATIONS_DAYS[phase]
 
           return (

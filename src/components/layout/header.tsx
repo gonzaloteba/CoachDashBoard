@@ -1,6 +1,5 @@
 interface HeaderProps {
   title: string
-  alertCount?: number
 }
 
 export function Header({ title }: HeaderProps) {
