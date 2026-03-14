@@ -3,7 +3,6 @@ import { Header } from '@/components/layout/header'
 import { KpiCards } from '@/components/dashboard/kpi-cards'
 import { ClientHealthChart } from '@/components/dashboard/client-health-chart'
 import { PhaseDistribution } from '@/components/dashboard/phase-distribution'
-import { calculateHealthScore } from '@/lib/health-score'
 import { startOfWeek, endOfWeek, startOfMonth } from 'date-fns'
 import type { NutritionPhase } from '@/lib/types'
 
@@ -33,7 +32,7 @@ export default async function DashboardPage() {
       .gte('call_date', monthStart),
     supabase
       .from('alerts')
-      .select('id')
+      .select('id, client_id')
       .eq('is_resolved', false),
     supabase
       .from('clients')
@@ -43,26 +42,17 @@ export default async function DashboardPage() {
 
   const activeClients = clients || []
   const checkinClientIds = new Set((checkinsThisWeek || []).map((c) => c.client_id))
-  const callCountByClient = new Map<string, number>()
-  ;(callsThisMonth || []).forEach((c) => {
-    callCountByClient.set(c.client_id, (callCountByClient.get(c.client_id) || 0) + 1)
-  })
 
-  // Calculate health scores
+  // Count unresolved alerts per active client
+  const alertClientIds = new Set((pendingAlerts || []).map((a) => a.client_id))
+
   let green = 0
-  let yellow = 0
   let red = 0
   const phaseDistribution: Record<NutritionPhase, number> = { 1: 0, 2: 0, 3: 0 }
 
   for (const client of activeClients) {
-    const score = calculateHealthScore(
-      client,
-      checkinClientIds.has(client.id) ? { submitted_at: now.toISOString() } as never : null,
-      callCountByClient.get(client.id) || 0
-    )
-    if (score === 'green') green++
-    else if (score === 'yellow') yellow++
-    else red++
+    if (alertClientIds.has(client.id)) red++
+    else green++
 
     phaseDistribution[client.current_phase as NutritionPhase] =
       (phaseDistribution[client.current_phase as NutritionPhase] || 0) + 1
@@ -86,7 +76,7 @@ export default async function DashboardPage() {
         />
 
         <div className="grid gap-6 lg:grid-cols-2">
-          <ClientHealthChart green={green} yellow={yellow} red={red} />
+          <ClientHealthChart green={green} red={red} />
           <PhaseDistribution distribution={phaseDistribution} />
         </div>
       </div>

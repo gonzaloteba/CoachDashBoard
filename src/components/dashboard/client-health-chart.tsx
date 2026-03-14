@@ -4,26 +4,22 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recha
 
 interface ClientHealthChartProps {
   green: number
-  yellow: number
   red: number
 }
 
 const COLORS = {
   green: '#22c55e',
-  yellow: '#eab308',
   red: '#ef4444',
 }
 
 const LABELS = {
-  green: 'Bien',
-  yellow: 'Atención',
-  red: 'Urgente',
+  green: 'Sin pendientes',
+  red: 'Con pendientes',
 }
 
-export function ClientHealthChart({ green, yellow, red }: ClientHealthChartProps) {
+export function ClientHealthChart({ green, red }: ClientHealthChartProps) {
   const data = [
     { name: LABELS.green, value: green, color: COLORS.green },
-    { name: LABELS.yellow, value: yellow, color: COLORS.yellow },
     { name: LABELS.red, value: red, color: COLORS.red },
   ].filter((d) => d.value > 0)
 

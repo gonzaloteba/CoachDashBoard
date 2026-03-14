@@ -10,7 +10,7 @@ export type AlertType =
   | 'program_ending'
 export type AlertSeverity = 'low' | 'medium' | 'high'
 export type UserRole = 'coach' | 'admin'
-export type HealthScore = 'green' | 'yellow' | 'red'
+export type HealthScore = 'green' | 'red'
 
 export interface Client {
   id: string

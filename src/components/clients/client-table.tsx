@@ -60,7 +60,6 @@ export function ClientTable({ clients }: ClientTableProps) {
         >
           <option value="all">Todos los semáforos</option>
           <option value="green">Verde</option>
-          <option value="yellow">Amarillo</option>
           <option value="red">Rojo</option>
         </select>
         <Link
@@ -107,10 +106,8 @@ export function ClientTable({ clients }: ClientTableProps) {
                       )}
                       title={
                         client.health_score === 'green'
-                          ? 'Todo bien'
-                          : client.health_score === 'yellow'
-                            ? 'Requiere atención'
-                            : 'Acción inmediata'
+                          ? 'Sin pendientes'
+                          : 'Tiene alertas pendientes'
                       }
                     />
                   </td>

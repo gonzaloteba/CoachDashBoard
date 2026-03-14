@@ -3,6 +3,7 @@ import { Header } from '@/components/layout/header'
 import { PhaseTracker } from '@/components/clients/phase-tracker'
 import { ClientDetailHeader } from '@/components/clients/client-detail-header'
 import { ClientDetailTabs } from '@/components/clients/client-detail-tabs'
+import { PendingAlerts } from '@/components/clients/pending-alerts'
 import { notFound } from 'next/navigation'
 import type { NutritionPhase } from '@/lib/types'
 
@@ -52,6 +53,8 @@ export default async function ClientDetailPage({ params }: Props) {
       <Header title={`${client.first_name} ${client.last_name}`} />
       <div className="p-6 space-y-6">
         <ClientDetailHeader client={client} alertCount={alerts?.length || 0} />
+
+        <PendingAlerts alerts={alerts || []} />
 
         <PhaseTracker
           currentPhase={client.current_phase as NutritionPhase}

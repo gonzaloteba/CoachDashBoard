@@ -13,6 +13,7 @@ export default async function ClientsPage() {
     { data: clients },
     { data: latestCheckins },
     { data: callsThisMonth },
+    { data: unresolvedAlerts },
   ] = await Promise.all([
     supabase.from('clients').select('*').order('first_name'),
     supabase
@@ -23,6 +24,10 @@ export default async function ClientsPage() {
       .from('calls')
       .select('client_id')
       .gte('call_date', monthStart),
+    supabase
+      .from('alerts')
+      .select('client_id')
+      .eq('is_resolved', false),
   ])
 
   // Build lookup maps
@@ -38,19 +43,21 @@ export default async function ClientsPage() {
     callCountByClient.set(call.client_id, (callCountByClient.get(call.client_id) || 0) + 1)
   }
 
+  // Count unresolved alerts per client
+  const alertCountByClient = new Map<string, number>()
+  for (const alert of unresolvedAlerts || []) {
+    alertCountByClient.set(alert.client_id, (alertCountByClient.get(alert.client_id) || 0) + 1)
+  }
+
   // Enrich clients with health score
   const enrichedClients: ClientWithHealth[] = (clients || []).map((client) => {
     const lastCheckinDate = lastCheckinByClient.get(client.id) || null
     const callsCount = callCountByClient.get(client.id) || 0
-    const healthScore = calculateHealthScore(
-      client,
-      lastCheckinDate ? { submitted_at: lastCheckinDate } as never : null,
-      callsCount
-    )
+    const alertCount = alertCountByClient.get(client.id) || 0
 
     return {
       ...client,
-      health_score: healthScore,
+      health_score: calculateHealthScore(alertCount),
       last_checkin_date: lastCheckinDate,
       calls_this_month: callsCount,
       days_remaining: getDaysRemaining(client.end_date),
