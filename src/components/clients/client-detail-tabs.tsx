@@ -69,6 +69,8 @@ export function ClientDetailTabs({
                 trainingpeaks={client.onboarding_trainingpeaks}
                 whatsappGroup={client.onboarding_whatsapp_group}
                 communityGroup={client.onboarding_community_group}
+                initialAudit={client.onboarding_initial_audit}
+                mealPlanSent={client.onboarding_meal_plan_sent}
               />
               <TrainingPlanCard plans={trainingPlans} clientId={clientId} />
             </div>

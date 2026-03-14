@@ -73,6 +73,8 @@ export interface Client {
   onboarding_trainingpeaks: boolean
   onboarding_whatsapp_group: boolean
   onboarding_community_group: boolean
+  onboarding_initial_audit: boolean
+  onboarding_meal_plan_sent: boolean
   created_at: string
   updated_at: string
 }

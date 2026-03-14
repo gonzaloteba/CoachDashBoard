@@ -178,12 +178,16 @@ export async function POST(request: NextRequest) {
         const incomplete =
           !client.onboarding_trainingpeaks ||
           !client.onboarding_whatsapp_group ||
-          !client.onboarding_community_group
+          !client.onboarding_community_group ||
+          !client.onboarding_initial_audit ||
+          !client.onboarding_meal_plan_sent
         if (incomplete) {
           const missing = []
           if (!client.onboarding_trainingpeaks) missing.push('TrainingPeaks')
           if (!client.onboarding_whatsapp_group) missing.push('WhatsApp 1:1')
           if (!client.onboarding_community_group) missing.push('Comunidad')
+          if (!client.onboarding_initial_audit) missing.push('Auditoría inicial')
+          if (!client.onboarding_meal_plan_sent) missing.push('Plan de alimentación')
           alertsToCreate.push({
             client_id: client.id,
             type: 'onboarding_incomplete',
