@@ -356,6 +356,8 @@ function CheckinCard({ checkIn, previousCheckIn }: { checkIn: CheckIn; previousC
 }
 
 export function CheckinHistory({ checkIns }: CheckinHistoryProps) {
+  const [galleryIndex, setGalleryIndex] = useState<number | null>(null)
+
   if (checkIns.length === 0) {
     return (
       <div className="rounded-xl border bg-card p-6 text-center text-sm text-muted-foreground">
@@ -370,6 +372,11 @@ export function CheckinHistory({ checkIns }: CheckinHistoryProps) {
     date: ci.submitted_at,
   })))
 
+  // First photo ever (oldest) for comparison — last in the array since sorted DESC
+  const firstPhoto = allPhotos.length > 0 ? allPhotos[allPhotos.length - 1] : null
+  const selectedPhoto = galleryIndex !== null ? allPhotos[galleryIndex] : null
+  const isFirstPhoto = galleryIndex === allPhotos.length - 1
+
   return (
     <div className="space-y-6">
       {/* Photo timeline (all photos across check-ins) */}
@@ -382,23 +389,109 @@ export function CheckinHistory({ checkIns }: CheckinHistoryProps) {
           <div className="flex gap-3 overflow-x-auto pb-2">
             {allPhotos.map((photo, i) => (
               <div key={i} className="shrink-0">
-                <a
-                  href={photo.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block rounded-lg overflow-hidden border hover:border-primary transition-colors"
+                <button
+                  onClick={() => setGalleryIndex(i)}
+                  className="block rounded-lg overflow-hidden border hover:border-primary transition-colors relative group"
                 >
                   <img
                     src={photo.url}
                     alt={`Progreso ${i + 1}`}
                     className="h-32 w-32 object-cover"
                   />
-                </a>
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                </button>
                 <p className="text-xs text-muted-foreground text-center mt-1">
                   {new Date(photo.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                 </p>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Gallery Lightbox with comparison */}
+      {galleryIndex !== null && selectedPhoto && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+          onClick={() => setGalleryIndex(null)}
+        >
+          <div className="relative mx-4 max-w-5xl w-full" onClick={(e) => e.stopPropagation()}>
+            {/* Top bar */}
+            <div className="absolute -top-10 left-0 right-0 flex items-center justify-between">
+              <p className="text-white/70 text-sm">
+                {galleryIndex + 1} / {allPhotos.length}
+              </p>
+              <div className="flex gap-2">
+                <a
+                  href={selectedPhoto.url}
+                  download={`progreso-${new Date(selectedPhoto.date).toISOString().split('T')[0]}-${galleryIndex + 1}.jpg`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-full bg-white/90 p-2 hover:bg-white transition-colors"
+                  title="Descargar"
+                >
+                  <Download className="h-4 w-4 text-gray-700" />
+                </a>
+                <button
+                  onClick={() => setGalleryIndex(null)}
+                  className="rounded-full bg-white/90 p-2 hover:bg-white transition-colors"
+                  title="Cerrar"
+                >
+                  <X className="h-4 w-4 text-gray-700" />
+                </button>
+              </div>
+            </div>
+
+            {/* Comparison view */}
+            <div className={`flex items-center justify-center gap-4 ${!isFirstPhoto && firstPhoto ? '' : ''}`}>
+              {/* First photo (reference) — only show when viewing a different photo */}
+              {!isFirstPhoto && firstPhoto && (
+                <div className="flex-1 flex flex-col items-center">
+                  <p className="text-white/70 text-xs mb-2">
+                    Primera foto — {new Date(firstPhoto.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </p>
+                  <img
+                    src={firstPhoto.url}
+                    alt="Primera foto de progreso"
+                    className="max-h-[75vh] rounded-lg object-contain w-full"
+                  />
+                </div>
+              )}
+              {/* Selected photo */}
+              <div className="flex-1 flex flex-col items-center">
+                <p className="text-white/70 text-xs mb-2">
+                  {isFirstPhoto ? 'Primera foto — ' : ''}
+                  {new Date(selectedPhoto.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </p>
+                <img
+                  src={selectedPhoto.url}
+                  alt={`Progreso ${galleryIndex + 1}`}
+                  className="max-h-[75vh] rounded-lg object-contain w-full"
+                />
+              </div>
+            </div>
+
+            {/* Navigation arrows */}
+            {allPhotos.length > 1 && (
+              <>
+                {galleryIndex > 0 && (
+                  <button
+                    onClick={() => setGalleryIndex(galleryIndex - 1)}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 p-2 hover:bg-white transition-colors"
+                  >
+                    <ChevronLeft className="h-5 w-5 text-gray-700" />
+                  </button>
+                )}
+                {galleryIndex < allPhotos.length - 1 && (
+                  <button
+                    onClick={() => setGalleryIndex(galleryIndex + 1)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 p-2 hover:bg-white transition-colors"
+                  >
+                    <ChevronRight className="h-5 w-5 text-gray-700" />
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}
