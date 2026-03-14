@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Phone, Plus, ChevronDown, ChevronUp, FileText, Video, ExternalLink, ClipboardList, CheckCircle2, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { cn } from '@/lib/utils'
+import { cn, inputClass, textareaClass } from '@/lib/utils'
 import type { Call } from '@/lib/types'
 
 interface CallsLogProps {
@@ -50,9 +50,6 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
     setCompletingAction(null)
     router.refresh()
   }
-
-  const inputClass =
-    'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
 
   return (
     <div className="rounded-xl border bg-card p-6 shadow-sm">
@@ -107,7 +104,7 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
             <textarea
               name="notes"
               rows={2}
-              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className={textareaClass}
               placeholder="Resumen de la llamada..."
             />
           </div>
@@ -118,7 +115,7 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
             <textarea
               name="transcript"
               rows={4}
-              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring font-mono text-xs"
+              className={cn(textareaClass, 'font-mono text-xs')}
               placeholder="Pega aquí el transcript de Gemini..."
             />
           </div>
@@ -129,7 +126,7 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
             <textarea
               name="coach_actions"
               rows={3}
-              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className={textareaClass}
               placeholder="Ej: Actualizar plan de alimentación, enviar recetas batch cooking..."
             />
           </div>

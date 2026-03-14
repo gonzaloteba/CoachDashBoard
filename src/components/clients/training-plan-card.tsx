@@ -5,7 +5,7 @@ import { Dumbbell, Plus } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { differenceInDays } from 'date-fns'
-import { cn } from '@/lib/utils'
+import { cn, inputClass, textareaClass } from '@/lib/utils'
 import type { TrainingPlan } from '@/lib/types'
 
 interface TrainingPlanCardProps {
@@ -44,8 +44,6 @@ export function TrainingPlanCard({ plans, clientId }: TrainingPlanCardProps) {
     router.refresh()
   }
 
-  const inputClass =
-    'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
 
   return (
     <div className="rounded-xl border bg-card p-6 shadow-sm">
@@ -89,7 +87,7 @@ export function TrainingPlanCard({ plans, clientId }: TrainingPlanCardProps) {
             <textarea
               name="notes"
               rows={2}
-              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className={textareaClass}
             />
           </div>
           <div className="flex gap-2">

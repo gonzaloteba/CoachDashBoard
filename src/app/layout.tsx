@@ -1,9 +1,9 @@
-import type { Metadata } from "next"
-import "./globals.css"
+import type { Metadata } from 'next'
+import './globals.css'
 
 export const metadata: Metadata = {
-  title: "Zalud Coach Dashboard",
-  description: "Dashboard interactivo para los coaches de Zalud",
+  title: 'Zalud Coach Dashboard',
+  description: 'Dashboard interactivo para los coaches de Zalud',
 }
 
 export default function RootLayout({

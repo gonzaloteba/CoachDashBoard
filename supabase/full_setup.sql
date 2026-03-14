@@ -39,6 +39,9 @@ CREATE TABLE IF NOT EXISTS clients (
   onboarding_trainingpeaks BOOLEAN DEFAULT FALSE,
   onboarding_whatsapp_group BOOLEAN DEFAULT FALSE,
   onboarding_community_group BOOLEAN DEFAULT FALSE,
+  onboarding_initial_audit BOOLEAN DEFAULT FALSE,
+  onboarding_meal_plan_sent BOOLEAN DEFAULT FALSE,
+  custom_phase_duration_days INTEGER,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
 
@@ -52,6 +55,11 @@ CREATE TABLE IF NOT EXISTS clients (
   motivation TEXT,
   medical_notes TEXT,
   goals TEXT,
+  diagnosis TEXT,
+  diagnosis_detail TEXT,
+  has_event BOOLEAN DEFAULT FALSE,
+  event_name TEXT,
+  event_date DATE,
 
   -- Auditoría Inicial fields
   wake_time TEXT,
@@ -63,8 +71,6 @@ CREATE TABLE IF NOT EXISTS clients (
   work_schedule TEXT,
   work_modality TEXT,
   work_activity_level TEXT,
-  has_event BOOLEAN DEFAULT FALSE,
-  event_name TEXT,
   training_days_per_week INTEGER,
   training_time TEXT,
   training_location TEXT,
@@ -78,6 +84,7 @@ CREATE TABLE IF NOT EXISTS clients (
   coffee_intake TEXT,
   food_intolerances TEXT,
   energy_level_initial INTEGER,
+  stress_level_initial INTEGER,
   energy_dips TEXT,
   onboarding_notes TEXT,
   onboarding_submitted_at TIMESTAMPTZ,
@@ -182,6 +189,8 @@ CREATE INDEX IF NOT EXISTS idx_calls_client ON calls(client_id, call_date DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_unresolved ON alerts(is_resolved, severity) WHERE is_resolved = FALSE;
 CREATE INDEX IF NOT EXISTS idx_alerts_client ON alerts(client_id);
 CREATE INDEX IF NOT EXISTS idx_training_plans_client ON training_plans(client_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_calls_google_event ON calls(google_event_id) WHERE google_event_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_calls_pending_coach_actions ON calls(client_id) WHERE coach_actions IS NOT NULL AND coach_actions_completed = false;
 
 -- =============================================
 -- TRIGGERS
@@ -191,7 +200,11 @@ CREATE INDEX IF NOT EXISTS idx_training_plans_client ON training_plans(client_id
 CREATE OR REPLACE FUNCTION calculate_phase_change()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW.current_phase = 1 THEN
+  IF NEW.custom_phase_duration_days = -1 THEN
+    NEW.phase_change_date := NULL;
+  ELSIF NEW.custom_phase_duration_days IS NOT NULL AND NEW.custom_phase_duration_days > 0 THEN
+    NEW.phase_change_date := CURRENT_DATE + (NEW.custom_phase_duration_days * INTERVAL '1 day');
+  ELSIF NEW.current_phase = 1 THEN
     NEW.phase_change_date := NEW.start_date + INTERVAL '7 days';
   ELSIF NEW.current_phase = 2 THEN
     NEW.phase_change_date := NEW.start_date + INTERVAL '37 days';
@@ -255,6 +268,9 @@ DO $$ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Authenticated users can insert calls') THEN
     CREATE POLICY "Authenticated users can insert calls" ON calls FOR INSERT TO authenticated WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Authenticated users can update calls') THEN
+    CREATE POLICY "Authenticated users can update calls" ON calls FOR UPDATE TO authenticated USING (true);
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Authenticated users can read training_plans') THEN
     CREATE POLICY "Authenticated users can read training_plans" ON training_plans FOR SELECT TO authenticated USING (true);
