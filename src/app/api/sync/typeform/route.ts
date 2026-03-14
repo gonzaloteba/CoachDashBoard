@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
     const supabase = getAdminClient()
     const results = {
       audit: { fetched: 0, created: 0, updated: 0, skipped: 0, errors: [] as string[] },
-      checkin: { fetched: 0, inserted: 0, skipped: 0, errors: [] as string[] },
+      checkin: { fetched: 0, inserted: 0, skipped: 0, clients_created: 0, auto_created_clients: [] as string[], errors: [] as string[] },
     }
 
     // ========== SYNC AUDITORÍA INICIAL ==========
@@ -253,10 +253,26 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        const client = await findClientByName(supabase, firstName, lastName)
+        let client = await findClientByName(supabase, firstName, lastName)
         if (!client) {
-          results.checkin.errors.push(`Client not found: ${firstName} ${lastName}`)
-          continue
+          // Auto-create client from check-in data
+          const { data: newClient, error: createErr } = await supabase
+            .from('clients')
+            .insert({
+              first_name: firstName.trim(),
+              last_name: lastName.trim(),
+              start_date: (submittedAt || new Date().toISOString()).split('T')[0],
+            })
+            .select('id')
+            .single()
+
+          if (createErr || !newClient) {
+            results.checkin.errors.push(`Auto-create failed for ${firstName} ${lastName}: ${createErr?.message}`)
+            continue
+          }
+          client = newClient
+          results.checkin.clients_created++
+          results.checkin.auto_created_clients.push(`${firstName} ${lastName}`)
         }
 
         // Build check-in data

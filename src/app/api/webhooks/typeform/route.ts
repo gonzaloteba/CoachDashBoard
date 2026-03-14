@@ -194,12 +194,27 @@ export async function POST(request: NextRequest) {
       }
     } else if (formId === CHECKIN_FORM_ID) {
       if (!client) {
-        console.warn(`No client found for check-in: "${firstName} ${lastName}"`)
-        return NextResponse.json({
-          success: false,
-          warning: `Client not found: ${firstName} ${lastName}`,
-          debug: { form_type: formType, first_name: firstName, last_name: lastName },
-        })
+        // Auto-create client from check-in data
+        const { data: newClient, error: createErr } = await supabase
+          .from('clients')
+          .insert({
+            first_name: firstName.trim(),
+            last_name: lastName.trim(),
+            start_date: (submittedAt || new Date().toISOString()).split('T')[0],
+          })
+          .select('id')
+          .single()
+
+        if (createErr || !newClient) {
+          console.error(`[webhook] Auto-create failed for "${firstName} ${lastName}": ${createErr?.message}`)
+          return NextResponse.json({
+            success: false,
+            error: `Auto-create client failed: ${createErr?.message}`,
+            debug: { form_type: formType, first_name: firstName, last_name: lastName },
+          })
+        }
+        client = newClient
+        console.log(`[webhook] Auto-created client "${firstName} ${lastName}" from check-in with id ${client.id}`)
       }
       await handleCheckIn(supabase, client.id, answerMap, submittedAt, responseId)
       action = 'checkin_inserted'
