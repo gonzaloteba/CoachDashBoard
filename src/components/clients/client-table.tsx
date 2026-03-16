@@ -6,6 +6,7 @@ import { Search, Plus, ClipboardList } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PHASE_LABELS, HEALTH_COLORS, BADGE_CONFIG } from '@/lib/constants'
 import { StatusDropdown } from '@/components/clients/status-dropdown'
+import { QuickAddCall } from '@/components/clients/quick-add-call'
 import type { ClientWithHealth, NutritionPhase } from '@/lib/types'
 
 interface ClientTableProps {
@@ -170,7 +171,10 @@ export function ClientTable({ clients }: ClientTableProps) {
                       : 'Sin check-in'}
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    {client.calls_this_month}/3
+                    <QuickAddCall
+                      clientId={client.id}
+                      callsThisMonth={client.calls_this_month}
+                    />
                   </td>
                 </tr>
               ))
