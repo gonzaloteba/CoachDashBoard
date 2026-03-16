@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, ExternalLink, Edit, Pencil, Check, X, Loader2 } from 'lucide-react'
@@ -25,6 +25,10 @@ export function ClientDetailHeader({ client, alertCount }: ClientDetailHeaderPro
   const [isSuccessCase, setIsSuccessCase] = useState(client.is_success_case)
   const [togglingBadge, setTogglingBadge] = useState<string | null>(null)
   const router = useRouter()
+
+  // Sync local state when server props update (after router.refresh)
+  useEffect(() => { setIsRenewed(client.is_renewed) }, [client.is_renewed])
+  useEffect(() => { setIsSuccessCase(client.is_success_case) }, [client.is_success_case])
 
   async function handleSave() {
     setSaving(true)
