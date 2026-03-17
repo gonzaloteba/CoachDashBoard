@@ -8,13 +8,30 @@ import {
   parseYesNoChoice,
 } from '@/lib/typeform-mappings'
 
+/** Dynamic key-value record for building Supabase row data */
+type RowData = Record<string, unknown>
+
+/** Typeform answer payload (external data) */
+export interface TypeformAnswer {
+  type: string
+  field?: { id: string }
+  number?: number
+  text?: string
+  boolean?: boolean
+  choice?: { label: string }
+  choices?: { labels: string[] }
+  file_url?: string
+  url?: string
+  phone_number?: string
+  [key: string]: unknown
+}
+
 // ============================================
 // Typeform answer extraction
 // ============================================
 
 /** Extract a typed value from a Typeform answer object */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function extractValue(answer: any): unknown {
+export function extractValue(answer: TypeformAnswer): unknown {
   switch (answer.type) {
     case 'number':
       return answer.number
@@ -111,8 +128,7 @@ export async function findClientByName(
 // ============================================
 
 /** Map audit form answers to client table columns */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function mapAuditFields(answerMap: Map<string, unknown>, data: Record<string, any>) {
+export function mapAuditFields(answerMap: Map<string, unknown>, data: RowData) {
   for (const [fieldId, column] of Object.entries(AUDIT_FIELD_MAP)) {
     const value = answerMap.get(fieldId)
     if (value === undefined || value === null) continue
@@ -158,10 +174,8 @@ export function buildCheckInData(
   clientId: string,
   submittedAt: string,
   responseId: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Record<string, any> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const checkInData: Record<string, any> = {
+): RowData {
+  const checkInData: RowData = {
     client_id: clientId,
     submitted_at: submittedAt,
     typeform_response_id: responseId,

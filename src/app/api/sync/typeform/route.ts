@@ -13,14 +13,23 @@ import {
   findClientByName,
   mapAuditFields,
   buildCheckInData,
+  type TypeformAnswer,
 } from '@/lib/typeform-helpers'
 
 const TYPEFORM_API_BASE = 'https://api.typeform.com'
 
+/** Typeform response shape (external untyped API) */
+interface TypeformResponse {
+  token: string
+  submitted_at?: string
+  landed_at?: string
+  answers?: TypeformAnswer[]
+  [key: string]: unknown
+}
+
 /** Fetch all responses from a Typeform form (handles pagination) */
 async function fetchAllResponses(formId: string, token: string) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const allItems: any[] = []
+  const allItems: TypeformResponse[] = []
   let before: string | undefined
 
   while (true) {
@@ -76,7 +85,7 @@ export async function POST(request: NextRequest) {
     for (const response of auditResponses) {
       try {
         const answers = response.answers || []
-        const submittedAt = response.submitted_at || response.landed_at
+        const submittedAt = response.submitted_at || response.landed_at || new Date().toISOString()
         const answerMap = new Map<string, unknown>()
         for (const answer of answers) {
           const id = answer.field?.id
@@ -93,8 +102,7 @@ export async function POST(request: NextRequest) {
         const client = await findClientByName(supabase, firstName, lastName)
 
         if (!client) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const clientData: Record<string, any> = {
+          const clientData: Record<string, unknown> = {
             first_name: firstName.trim(),
             last_name: lastName.trim(),
             start_date: (submittedAt || new Date().toISOString()).split('T')[0],
@@ -109,8 +117,7 @@ export async function POST(request: NextRequest) {
             results.audit.created++
           }
         } else {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const updateData: Record<string, any> = { onboarding_submitted_at: submittedAt }
+          const updateData: Record<string, unknown> = { onboarding_submitted_at: submittedAt }
           mapAuditFields(answerMap, updateData)
 
           const { error } = await supabase.from('clients').update(updateData).eq('id', client.id)
@@ -144,7 +151,7 @@ export async function POST(request: NextRequest) {
         }
 
         const answers = response.answers || []
-        const submittedAt = response.submitted_at || response.landed_at
+        const submittedAt = response.submitted_at || response.landed_at || new Date().toISOString()
         const answerMap = new Map<string, unknown>()
         for (const answer of answers) {
           const id = answer.field?.id
@@ -194,7 +201,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, results })
   } catch (error) {
-    console.error('Sync error:', error)
     return NextResponse.json(
       { error: 'Internal server error', detail: (error as Error).message },
       { status: 500 }

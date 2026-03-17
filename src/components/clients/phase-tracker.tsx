@@ -89,8 +89,6 @@ export function PhaseTracker({ clientId, currentPhase, startDate, endDate, phase
         .eq('id', clientId)
 
       if (error) {
-        // If custom_phase_duration_days column doesn't exist, retry without it
-        console.error('Phase update error, retrying without custom field:', error.message)
         const { error: retryError } = await supabase
           .from('clients')
           .update({
@@ -99,10 +97,7 @@ export function PhaseTracker({ clientId, currentPhase, startDate, endDate, phase
           })
           .eq('id', clientId)
 
-        if (retryError) {
-          console.error('Phase update retry failed:', retryError.message)
-          return
-        }
+        if (retryError) return
       }
 
       // Resolve existing phase_change alerts

@@ -16,10 +16,7 @@ export async function persistPhoto(
   try {
     // Download the image from the temporary URL
     const response = await fetch(tempUrl)
-    if (!response.ok) {
-      console.error(`Failed to download photo: ${response.status} ${tempUrl}`)
-      return tempUrl
-    }
+    if (!response.ok) return tempUrl
 
     const blob = await response.blob()
 
@@ -41,10 +38,7 @@ export async function persistPhoto(
         upsert: false,
       })
 
-    if (uploadError) {
-      console.error('Failed to upload photo to storage:', uploadError.message)
-      return tempUrl
-    }
+    if (uploadError) return tempUrl
 
     // Get the public URL
     const { data: { publicUrl } } = supabase.storage
@@ -52,9 +46,8 @@ export async function persistPhoto(
       .getPublicUrl(path)
 
     return publicUrl
-  } catch (err) {
-    console.error('persistPhoto error:', err)
-    return tempUrl // fallback to original URL
+  } catch {
+    return tempUrl
   }
 }
 

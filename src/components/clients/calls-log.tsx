@@ -44,7 +44,7 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
     router.refresh()
   }
 
-  async function completeCoachActions(callId: string) {
+  async function handleCompleteActions(callId: string) {
     setCompletingAction(callId)
     await completeCoachActionsAction(callId)
     setCompletingAction(null)
@@ -272,7 +272,7 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
                           </p>
                           {actionsPending && (
                             <button
-                              onClick={() => completeCoachActions(call.id)}
+                              onClick={() => handleCompleteActions(call.id)}
                               disabled={completingAction === call.id}
                               className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 transition-colors disabled:opacity-50"
                             >

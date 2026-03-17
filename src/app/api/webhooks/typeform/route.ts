@@ -171,9 +171,8 @@ export async function POST(request: NextRequest) {
       client_id: client?.id,
     })
   } catch (error) {
-    console.error('Webhook error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', detail: (error as Error).message },
       { status: 500 }
     )
   }
@@ -221,8 +220,7 @@ async function createClientFromAudit(
   answerMap: Map<string, unknown>,
   submittedAt: string
 ): Promise<{ id: string }> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const clientData: Record<string, any> = {
+  const clientData: Record<string, unknown> = {
     first_name: firstName.trim(),
     last_name: lastName.trim(),
     start_date: submittedAt.split('T')[0],
@@ -252,8 +250,7 @@ async function handleAudit(
   answerMap: Map<string, unknown>,
   submittedAt: string
 ) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const updateData: Record<string, any> = {
+  const updateData: Record<string, unknown> = {
     onboarding_submitted_at: submittedAt,
   }
 
@@ -290,8 +287,7 @@ async function createInitialCheckIn(
     photoUrls = [permanentUrl]
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const checkInData: Record<string, any> = {
+  const checkInData: Record<string, unknown> = {
     client_id: clientId,
     submitted_at: submittedAt,
     typeform_response_id: `audit-${responseId}`,

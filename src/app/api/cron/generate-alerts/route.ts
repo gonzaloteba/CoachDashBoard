@@ -189,9 +189,8 @@ export async function POST(request: NextRequest) {
   if (alertsToCreate.length > 0) {
     const { error } = await supabase.from('alerts').insert(alertsToCreate)
     if (error) {
-      console.error('Error creating alerts:', error)
       return NextResponse.json(
-        { error: 'Failed to create alerts' },
+        { error: 'Failed to create alerts', detail: error.message },
         { status: 500 }
       )
     }

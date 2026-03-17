@@ -3,6 +3,11 @@
 import { revalidatePath } from 'next/cache'
 import { getAdminClient } from '@/lib/supabase/admin'
 
+function revalidateDashboard() {
+  revalidatePath('/dashboard/clients', 'layout')
+  revalidatePath('/dashboard', 'layout')
+}
+
 export async function updateClientEndDate(clientId: string, endDate: string) {
   const supabase = getAdminClient()
 
@@ -15,9 +20,7 @@ export async function updateClientEndDate(clientId: string, endDate: string) {
     return { success: false, error: error.message }
   }
 
-  revalidatePath('/dashboard/clients', 'layout')
-  revalidatePath('/dashboard', 'layout')
-
+  revalidateDashboard()
   return { success: true }
 }
 
@@ -37,9 +40,7 @@ export async function toggleClientBadge(
     return { success: false, error: error.message }
   }
 
-  revalidatePath('/dashboard/clients', 'layout')
-  revalidatePath('/dashboard', 'layout')
-
+  revalidateDashboard()
   return { success: true }
 }
 
@@ -55,8 +56,6 @@ export async function completeCoachActions(callId: string) {
     return { success: false, error: error.message }
   }
 
-  revalidatePath('/dashboard/clients', 'layout')
-  revalidatePath('/dashboard', 'layout')
-
+  revalidateDashboard()
   return { success: true }
 }
