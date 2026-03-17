@@ -160,6 +160,23 @@ export async function POST(request: NextRequest) {
       }
 
     } else if (formId === CHECKIN_FORM_ID) {
+      // Check for duplicate check-in response
+      if (responseId) {
+        const { data: existingCheckIn } = await supabase
+          .from('check_ins')
+          .select('id')
+          .eq('typeform_response_id', responseId)
+          .limit(1)
+          .single()
+        if (existingCheckIn) {
+          return NextResponse.json({
+            success: true,
+            action: 'duplicate_skipped',
+            check_in_id: existingCheckIn.id,
+          })
+        }
+      }
+
       if (!client) {
         // Auto-create client from check-in data
         const { data: newClient, error: createErr } = await supabase
@@ -174,11 +191,14 @@ export async function POST(request: NextRequest) {
           .single()
 
         if (createErr || !newClient) {
-          return NextResponse.json({
-            success: false,
-            error: `Auto-create client failed: ${createErr?.message}`,
-            debug: { form_type: formType, first_name: firstName, last_name: lastName },
-          })
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Auto-create client failed: ${createErr?.message}`,
+              debug: { form_type: formType, first_name: firstName, last_name: lastName },
+            },
+            { status: 500 }
+          )
         }
         client = newClient
       }
@@ -214,9 +234,13 @@ async function handleCheckIn(
 ) {
   const checkInData = buildCheckInData(answerMap, clientId, submittedAt, responseId)
 
-  // Persist check-in photos to Supabase Storage
-  if (checkInData.photo_urls && Array.isArray(checkInData.photo_urls) && checkInData.photo_urls.length > 0) {
-    checkInData.photo_urls = await persistPhotos(supabase, checkInData.photo_urls, clientId, 'checkin')
+  // Persist check-in photos to Supabase Storage (non-fatal: keeps temp URLs on failure)
+  try {
+    if (checkInData.photo_urls && Array.isArray(checkInData.photo_urls) && checkInData.photo_urls.length > 0) {
+      checkInData.photo_urls = await persistPhotos(supabase, checkInData.photo_urls, clientId, 'checkin')
+    }
+  } catch {
+    // Photo persistence failed — check-in will keep original Typeform temp URLs
   }
 
   const { error: insertError } = await supabase
@@ -225,13 +249,17 @@ async function handleCheckIn(
 
   if (insertError) throw insertError
 
-  // Resolve any existing missed_checkin alerts
-  await supabase
-    .from('alerts')
-    .update({ is_resolved: true, resolved_at: new Date().toISOString() })
-    .eq('client_id', clientId)
-    .eq('type', 'missed_checkin')
-    .eq('is_resolved', false)
+  // Resolve any existing missed_checkin alerts (non-fatal: check-in is already saved)
+  try {
+    await supabase
+      .from('alerts')
+      .update({ is_resolved: true, resolved_at: new Date().toISOString() })
+      .eq('client_id', clientId)
+      .eq('type', 'missed_checkin')
+      .eq('is_resolved', false)
+  } catch {
+    // Alert resolution is non-critical — check-in data is already persisted
+  }
 }
 
 // ============================================

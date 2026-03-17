@@ -196,7 +196,7 @@ export function buildCheckInData(
         checkInData[column] = parseSleepHours(value as string)
         break
       case 'cravings':
-        checkInData[column] = typeof value === 'boolean' ? value : true
+        checkInData[column] = typeof value === 'boolean' ? value : parseYesNoChoice(String(value))
         break
       case 'loss_of_control':
         checkInData[column] = typeof value === 'string' ? parseYesNoChoice(value) : value
