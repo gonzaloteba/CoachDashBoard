@@ -34,9 +34,30 @@ export default async function DashboardPage({ searchParams }: Props) {
   }
 
   // Determine which coach_id to filter by
+  // Admin MUST select a coach to see data; coaches always see their own
   const filterCoachId = admin
-    ? (selectedCoachId || null)  // admin: filter by selected coach, or show all
-    : coach?.id ?? null          // coach: always filter by own id
+    ? (selectedCoachId || null)
+    : coach?.id ?? null
+
+  // Admin without coach selected: show empty state
+  if (admin && !filterCoachId) {
+    return (
+      <div>
+        <Header title="Dashboard" />
+        <div className="space-y-6 p-6">
+          <CoachSelector coaches={coaches} selectedCoachId={null} />
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card p-12 text-center">
+            <p className="text-lg font-medium text-muted-foreground">
+              Selecciona un coach para ver su dashboard
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground/70">
+              Usa el selector de arriba para ver los datos de un coach espec&iacute;fico.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const clientsQuery = supabase.from('clients').select('*').eq('status', 'active')
   if (filterCoachId) {

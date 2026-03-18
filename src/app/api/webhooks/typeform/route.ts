@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac } from 'crypto'
 import { getAdminClient } from '@/lib/supabase/admin'
+import { getDefaultCoachId } from '@/lib/auth'
 import type { AdminClient } from '@/lib/supabase/admin'
 import {
   CHECKIN_FORM_ID,
@@ -89,6 +90,9 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Resolve default coach for auto-created clients
+    const defaultCoachId = await getDefaultCoachId()
+
     // Extract client name
     const firstName = answerMap.get(firstNameRef) as string | undefined
     const lastName = answerMap.get(lastNameRef) as string | undefined
@@ -131,7 +135,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (!client) {
-        client = await createClientFromAudit(supabase, firstName, lastName, answerMap, submittedAt, responseId)
+        client = await createClientFromAudit(supabase, firstName, lastName, answerMap, submittedAt, defaultCoachId, responseId)
         action = 'client_created'
       } else {
         await handleAudit(supabase, client.id, answerMap, submittedAt, responseId)
@@ -185,7 +189,7 @@ export async function POST(request: NextRequest) {
             first_name: firstName.trim(),
             last_name: lastName.trim(),
             start_date: (submittedAt || new Date().toISOString()).split('T')[0],
-            coach_id: process.env.DEFAULT_COACH_ID || null,
+            coach_id: defaultCoachId,
           })
           .select('id')
           .single()
@@ -282,6 +286,7 @@ async function createClientFromAudit(
   lastName: string,
   answerMap: Map<string, unknown>,
   submittedAt: string,
+  coachId: string | null,
   responseId?: string
 ): Promise<{ id: string }> {
   const startDate = submittedAt.split('T')[0]
@@ -295,7 +300,7 @@ async function createClientFromAudit(
     renewal_date: endDate,
     plan_type: '3_months',
     onboarding_submitted_at: submittedAt,
-    coach_id: process.env.DEFAULT_COACH_ID || null,
+    coach_id: coachId,
   }
   if (responseId) clientData.onboarding_response_id = responseId
 

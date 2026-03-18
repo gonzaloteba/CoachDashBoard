@@ -32,3 +32,25 @@ export async function getCurrentCoach(): Promise<Coach | null> {
 export function isAdmin(coach: Coach): boolean {
   return coach.role === 'admin'
 }
+
+/**
+ * Get the default coach ID for auto-assigning new clients.
+ * Uses DEFAULT_COACH_ID env var, or falls back to the first coach with role 'coach'.
+ */
+export async function getDefaultCoachId(): Promise<string | null> {
+  if (process.env.DEFAULT_COACH_ID) return process.env.DEFAULT_COACH_ID
+  try {
+    const { getAdminClient } = await import('@/lib/supabase/admin')
+    const supabase = getAdminClient()
+    const { data } = await supabase
+      .from('coaches')
+      .select('id')
+      .eq('role', 'coach')
+      .order('created_at')
+      .limit(1)
+      .single()
+    return data?.id ?? null
+  } catch {
+    return null
+  }
+}

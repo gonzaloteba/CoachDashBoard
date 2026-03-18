@@ -31,6 +31,23 @@ export default async function AlertsPage({ searchParams }: Props) {
     ? (selectedCoachId || null)
     : coach?.id ?? null
 
+  // Admin without coach selected: show empty state
+  if (admin && !filterCoachId) {
+    return (
+      <div>
+        <Header title="Alertas" />
+        <div className="p-6 space-y-4">
+          <CoachSelector coaches={coaches} selectedCoachId={null} />
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card p-12 text-center">
+            <p className="text-lg font-medium text-muted-foreground">
+              Selecciona un coach para ver sus alertas
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // Get client IDs for the filtered coach
   let clientIds: string[] | null = null
   if (filterCoachId) {

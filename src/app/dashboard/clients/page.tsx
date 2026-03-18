@@ -33,6 +33,23 @@ export default async function ClientsPage({ searchParams }: Props) {
     ? (selectedCoachId || null)
     : coach?.id ?? null
 
+  // Admin without coach selected: show empty state
+  if (admin && !filterCoachId) {
+    return (
+      <div>
+        <Header title="Clientes" />
+        <div className="p-6 space-y-4">
+          <CoachSelector coaches={coaches} selectedCoachId={null} />
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card p-12 text-center">
+            <p className="text-lg font-medium text-muted-foreground">
+              Selecciona un coach para ver sus clientes
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const clientsQuery = supabase.from('clients').select('*').order('first_name')
   if (filterCoachId) {
     clientsQuery.eq('coach_id', filterCoachId)
