@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
+import { getDefaultCoachId } from '@/lib/auth'
 import {
   CHECKIN_FORM_ID,
   AUDIT_FORM_ID,
@@ -80,6 +81,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'TYPEFORM_API_TOKEN not configured' }, { status: 500 })
     }
 
+    const defaultCoachId = await getDefaultCoachId()
+
     const supabase = getAdminClient()
     const results = {
       audit: { fetched: 0, created: 0, updated: 0, skipped: 0, initial_checkins_created: 0, errors: [] as string[] },
@@ -121,7 +124,7 @@ export async function POST(request: NextRequest) {
             plan_type: '3_months',
             onboarding_submitted_at: submittedAt,
             onboarding_response_id: response.token,
-            coach_id: process.env.DEFAULT_COACH_ID || null,
+            coach_id: defaultCoachId,
           }
           mapAuditFields(answerMap, clientData)
 
