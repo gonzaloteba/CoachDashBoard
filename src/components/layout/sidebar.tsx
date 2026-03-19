@@ -50,7 +50,7 @@ export function Sidebar({ coachName, coachRole }: SidebarProps) {
   return (
     <aside className="flex h-screen w-64 flex-col border-r bg-card">
       <div className="flex h-16 items-center border-b px-6">
-        <h1 className="text-xl font-bold">Zalud</h1>
+        <h1 className="text-xl font-bold">Coach Dashboard</h1>
       </div>
 
       <nav className="flex-1 space-y-1 p-4">
