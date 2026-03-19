@@ -62,7 +62,14 @@ export default function LoginPage() {
       })
 
       if (error) {
-        setError('Error al enviar el email. Intenta de nuevo.')
+        console.error('Reset password error:', error.message, error.status)
+        if (error.message.includes('rate') || error.message.includes('limit')) {
+          setError('Demasiados intentos. Espera unos minutos.')
+        } else if (error.message.includes('not found') || error.message.includes('no user')) {
+          setError('No se encontró una cuenta con ese email.')
+        } else {
+          setError(`Error: ${error.message}`)
+        }
       } else {
         setSuccess('Te hemos enviado un email para restablecer tu contraseña.')
       }
