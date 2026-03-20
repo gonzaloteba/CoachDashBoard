@@ -292,8 +292,21 @@ export function CheckinHistory({ checkIns }: CheckinHistoryProps) {
             </div>
 
             {/* Comparison view */}
-            <div className={`flex items-center justify-center gap-4 ${!isFirstPhoto && firstPhoto ? '' : ''}`}>
-              {/* First photo (reference) — only show when viewing a different photo */}
+            <div className={`flex items-center justify-center gap-1 ${!isFirstPhoto && firstPhoto ? '' : ''}`}>
+              {/* Selected photo (left) */}
+              <div className="flex-1 flex flex-col items-center">
+                <p className="text-white/70 text-xs mb-2">
+                  {isFirstPhoto ? 'Primera foto — ' : ''}
+                  {new Date(selectedPhoto.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </p>
+                <SafeImage
+                  src={selectedPhoto.url}
+                  alt={`Progreso ${galleryIndex + 1}`}
+                  className="max-h-[75vh] rounded-lg object-contain w-full"
+                  fallbackClassName="h-64 w-full rounded-lg"
+                />
+              </div>
+              {/* First photo (reference, right) — only show when viewing a different photo */}
               {!isFirstPhoto && firstPhoto && (
                 <div className="flex-1 flex flex-col items-center">
                   <p className="text-white/70 text-xs mb-2">
@@ -307,19 +320,6 @@ export function CheckinHistory({ checkIns }: CheckinHistoryProps) {
                   />
                 </div>
               )}
-              {/* Selected photo */}
-              <div className="flex-1 flex flex-col items-center">
-                <p className="text-white/70 text-xs mb-2">
-                  {isFirstPhoto ? 'Primera foto — ' : ''}
-                  {new Date(selectedPhoto.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </p>
-                <SafeImage
-                  src={selectedPhoto.url}
-                  alt={`Progreso ${galleryIndex + 1}`}
-                  className="max-h-[75vh] rounded-lg object-contain w-full"
-                  fallbackClassName="h-64 w-full rounded-lg"
-                />
-              </div>
             </div>
 
             {/* Navigation arrows */}
