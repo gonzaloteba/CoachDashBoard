@@ -17,7 +17,7 @@
 
 const CONFIG = {
   // The Drive folder where Gemini saves transcripts
-  FOLDER_ID: '1Ojx8D6ifmxtrFPUVUhBYJA5jiQLkzuXx',
+  FOLDER_ID: '1wq0z8V5iWR9qnLsE5TrdMDpVDJdlQ0qM',
 
   // Dashboard webhook URL
   WEBHOOK_URL: 'https://zalud-coach.vercel.app/api/webhooks/google-transcript',
