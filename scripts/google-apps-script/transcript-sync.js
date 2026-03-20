@@ -217,6 +217,32 @@ function setupTrigger() {
 }
 
 /**
+ * Run this ONCE to re-process all previously synced transcripts.
+ * Removes the [SYNCED] prefix from all files and runs syncTranscripts()
+ * so they get re-sent to the dashboard (which will regenerate coach actions).
+ */
+function resyncAll() {
+  const folder = DriveApp.getFolderById(CONFIG.FOLDER_ID);
+  const files = folder.getFilesByType(MimeType.GOOGLE_DOCS);
+  var count = 0;
+
+  while (files.hasNext()) {
+    const file = files.next();
+    const name = file.getName();
+
+    if (name.startsWith(CONFIG.PROCESSED_LABEL)) {
+      const newName = name.replace(CONFIG.PROCESSED_LABEL + ' ', '');
+      file.setName(newName);
+      count++;
+      Logger.log('Unmarked: ' + newName);
+    }
+  }
+
+  Logger.log('Unmarked ' + count + ' files. Now running syncTranscripts()...');
+  syncTranscripts();
+}
+
+/**
  * Run this to test with a single file without marking it as processed.
  */
 function testWithoutMarking() {
