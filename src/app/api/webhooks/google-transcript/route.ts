@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { getDefaultCoachId } from '@/lib/auth'
 import { findClientByName } from '@/lib/typeform-helpers'
+import { generateCoachActions } from '@/lib/transcript-ai'
 
 /**
  * POST /api/webhooks/google-transcript
@@ -72,6 +73,12 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (existingCall) {
+      // Generate coach actions from updated transcript
+      const clientNameForUpdate = body.client_first_name
+        ? `${body.client_first_name} ${body.client_last_name || ''}`.trim()
+        : undefined
+      const updatedActions = await generateCoachActions(transcript, clientNameForUpdate)
+
       // Update transcript on existing call
       const { error: updateError } = await supabase
         .from('calls')
@@ -79,6 +86,7 @@ export async function POST(request: NextRequest) {
           transcript,
           ...(body.meet_link ? { meet_link: body.meet_link } : {}),
           ...(body.notes ? { notes: body.notes } : {}),
+          ...(updatedActions ? { coach_actions: updatedActions, coach_actions_completed: false } : {}),
         })
         .eq('id', existingCall.id)
 
@@ -93,6 +101,7 @@ export async function POST(request: NextRequest) {
         success: true,
         action: 'transcript_updated',
         call_id: existingCall.id,
+        coach_actions_generated: !!updatedActions,
       })
     }
 
@@ -141,11 +150,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Generate coach actions from transcript using AI (non-blocking for response)
+    const clientName = body.client_first_name
+      ? `${body.client_first_name} ${body.client_last_name || ''}`.trim()
+      : undefined
+    const coachActions = await generateCoachActions(transcript, clientName)
+    if (coachActions) {
+      await supabase
+        .from('calls')
+        .update({ coach_actions: coachActions })
+        .eq('id', newCall.id)
+    }
+
     return NextResponse.json({
       success: true,
       action: clientId ? 'call_created' : 'call_created_no_client',
       call_id: newCall.id,
       client_id: clientId,
+      coach_actions_generated: !!coachActions,
     })
   } catch (error) {
     return NextResponse.json(

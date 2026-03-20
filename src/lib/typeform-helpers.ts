@@ -99,33 +99,51 @@ export function findClientInList(
     return { id: exact.id }
   }
 
-  // 2. Fuzzy match
+  // 2. Fuzzy match (handles different first/last name splits)
+  const searchFull = `${normFn} ${normLn}`.trim()
+
   for (const client of clients) {
     const cFn = removeAccents(client.first_name || '').toLowerCase().trim()
     const cLn = removeAccents(client.last_name || '').toLowerCase().trim()
+    const cFull = `${cFn} ${cLn}`.trim()
 
+    // 2a. Traditional first/last matching
     const fnMatch =
       cFn === normFn ||
       normFn === cFn.split(/\s+/)[0] ||
       cFn === normFn.split(/\s+/)[0]
 
-    if (!fnMatch) continue
+    if (fnMatch) {
+      const lnMatch =
+        cLn === normLn ||
+        normLn.startsWith(cLn) ||
+        cLn.startsWith(normLn) ||
+        cLn.split(/\s+/)[0] === lnFirstWord ||
+        cLn === lnFirstWord
 
-    const lnMatch =
-      cLn === normLn ||
-      normLn.startsWith(cLn) ||
-      cLn.startsWith(normLn) ||
-      cLn.split(/\s+/)[0] === lnFirstWord ||
-      cLn === lnFirstWord
+      if (lnMatch) {
+        log.info('Client matched by fuzzy name', {
+          clientId: client.id,
+          searchedName: `${fn} ${ln}`,
+          matchedName: `${client.first_name} ${client.last_name}`,
+          matchType: 'fuzzy',
+        })
+        return { id: client.id }
+      }
+    }
 
-    if (lnMatch) {
-      log.info('Client matched by fuzzy name', {
-        clientId: client.id,
-        searchedName: `${fn} ${ln}`,
-        matchedName: `${client.first_name} ${client.last_name}`,
-        matchType: 'fuzzy',
-      })
-      return { id: client.id }
+    // 2b. Full-name matching (handles different first/last splits)
+    // e.g. search "Hermes" + "Octavio Contla" vs DB "Hermes Octavio" + "Contla Gutiérrez"
+    if (searchFull.length >= 3 && cFull.length >= 3) {
+      if (cFull.startsWith(searchFull) || searchFull.startsWith(cFull)) {
+        log.info('Client matched by full-name prefix', {
+          clientId: client.id,
+          searchedName: `${fn} ${ln}`,
+          matchedName: `${client.first_name} ${client.last_name}`,
+          matchType: 'full-name-prefix',
+        })
+        return { id: client.id }
+      }
     }
   }
 
