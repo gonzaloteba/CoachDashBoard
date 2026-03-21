@@ -1,4 +1,8 @@
+import sharp from 'sharp'
 import type { AdminClient } from '@/lib/supabase/admin'
+
+/** Content types that browsers cannot display natively and need conversion */
+const NEEDS_CONVERSION = ['image/heic', 'image/heif']
 
 /**
  * Build fetch headers for downloading a photo URL.
@@ -49,10 +53,16 @@ export async function persistPhoto(
         return tempUrl
       }
 
-      const blob = await response.blob()
+      let buffer = Buffer.from(await response.arrayBuffer())
+      let contentType = response.headers.get('content-type') || 'image/jpeg'
+
+      // Convert HEIC/HEIF to JPEG (browsers cannot display these formats)
+      if (NEEDS_CONVERSION.some((t) => contentType.includes(t))) {
+        buffer = Buffer.from(await sharp(buffer).jpeg({ quality: 85 }).toBuffer())
+        contentType = 'image/jpeg'
+      }
 
       // Determine file extension from content type
-      const contentType = response.headers.get('content-type') || 'image/jpeg'
       const ext = contentType.includes('png') ? 'png'
         : contentType.includes('webp') ? 'webp'
         : 'jpg'
@@ -64,7 +74,7 @@ export async function persistPhoto(
       // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('client-photos')
-        .upload(path, blob, {
+        .upload(path, buffer, {
           contentType,
           upsert: false,
         })
