@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useCallback, useState, useEffect, useRef } from 'react'
+import { useMemo, useCallback, useState, useEffect, useRef, useDeferredValue } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Search, Plus, ClipboardList, Cake, ArrowRightCircle } from 'lucide-react'
@@ -58,11 +58,14 @@ export function ClientTable({ clients }: ClientTableProps) {
   const setBadgeFilter = useCallback((value: string) => setFilter('badge', value), [setFilter])
   const setCheckinFilter = useCallback((value: string) => setFilter('checkin', value), [setFilter])
 
+  // Defer the search value used for filtering so typing stays responsive
+  const deferredSearch = useDeferredValue(search)
+
   const filtered = useMemo(() => clients.filter((client) => {
     const matchesSearch =
       `${client.first_name} ${client.last_name}`
         .toLowerCase()
-        .includes(search.toLowerCase())
+        .includes(deferredSearch.toLowerCase())
     const matchesStatus = statusFilter === 'all' || client.status === statusFilter
     const matchesHealth = healthFilter === 'all' || client.health_score === healthFilter
     const matchesBadge =
@@ -74,7 +77,7 @@ export function ClientTable({ clients }: ClientTableProps) {
       (checkinFilter === 'yes' && client.has_weekly_checkin) ||
       (checkinFilter === 'no' && !client.has_weekly_checkin)
     return matchesSearch && matchesStatus && matchesHealth && matchesBadge && matchesCheckin
-  }), [clients, search, statusFilter, healthFilter, badgeFilter, checkinFilter])
+  }), [clients, deferredSearch, statusFilter, healthFilter, badgeFilter, checkinFilter])
 
   return (
     <div className="space-y-4">
