@@ -5,7 +5,7 @@ import { generatePlanPdf } from '@/lib/pdf-generator'
 import type { Client } from '@/lib/types'
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
@@ -50,7 +50,8 @@ export async function POST(
 
     // Generate PDF with routine embedded in page 3
     const clientName = `${typedClient.first_name} ${typedClient.last_name}`
-    const pdfBytes = await generatePlanPdf(clientName, routine)
+    const baseUrl = new URL(request.url).origin
+    const pdfBytes = await generatePlanPdf(clientName, routine, baseUrl)
 
     // Return PDF as downloadable file
     const fileName = `Plan Alimentacion - ${typedClient.first_name} ${typedClient.last_name}.pdf`
@@ -61,9 +62,10 @@ export async function POST(
       },
     })
   } catch (error) {
-    console.error('Plan PDF generation error:', error)
+    const message = error instanceof Error ? error.message : 'Error desconocido'
+    console.error('Plan PDF generation error:', message, error)
     return NextResponse.json(
-      { error: 'Error interno al generar el PDF' },
+      { error: `Error al generar el PDF: ${message}` },
       { status: 500 }
     )
   }
