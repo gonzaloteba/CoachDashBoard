@@ -9,6 +9,7 @@ import {
   LogOut,
   Shield,
   User,
+  LinkIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -17,6 +18,7 @@ import { useRouter } from 'next/navigation'
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Clientes', href: '/dashboard/clients', icon: Users },
+  { name: 'Recursos', href: '/dashboard/resources', icon: LinkIcon },
   { name: 'Configuración', href: '/dashboard/settings', icon: Settings },
 ]
 
