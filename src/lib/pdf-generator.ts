@@ -15,6 +15,24 @@ const MARGIN_RIGHT = 45
 const LINE_HEIGHT = 14
 const SECTION_GAP = 10
 
+// Replace unicode characters that WinAnsi (standard PDF fonts) cannot encode
+function sanitizeForPdf(text: string): string {
+  return text
+    .replace(/\u2192/g, '>')      // → rightwards arrow
+    .replace(/\u2022/g, '-')      // • bullet
+    .replace(/\u2013/g, '-')      // – en dash
+    .replace(/\u2014/g, '--')     // — em dash
+    .replace(/\u2018/g, "'")      // ' left single quote
+    .replace(/\u2019/g, "'")      // ' right single quote
+    .replace(/\u201C/g, '"')      // " left double quote
+    .replace(/\u201D/g, '"')      // " right double quote
+    .replace(/\u2026/g, '...')    // … ellipsis
+    .replace(/\u00B7/g, '-')      // · middle dot
+    // Strip any remaining non-WinAnsi characters (keep latin-1 range)
+    // eslint-disable-next-line no-control-regex
+    .replace(/[^\x00-\xFF]/g, '')
+}
+
 export async function generatePlanPdf(
   clientName: string,
   routineContent: string
@@ -32,11 +50,10 @@ export async function generatePlanPdf(
   const helveticaBold = await pdf.embedFont(StandardFonts.HelveticaBold)
 
   // Start below the existing header ("ZALUD" + "RUTINA DIARIA OPTIMIZADA" + subtitle)
-  // From the image, the header takes roughly the top 120pt
   let y = height - 130
 
   // Draw client name
-  const nameText = clientName.toUpperCase()
+  const nameText = sanitizeForPdf(clientName.toUpperCase())
   const nameWidth = helveticaBold.widthOfTextAtSize(nameText, 11)
   page.drawText(nameText, {
     x: (width - nameWidth) / 2,
@@ -66,13 +83,15 @@ export async function generatePlanPdf(
       continue
     }
 
-    // Check if we're running out of space
     if (y < 40) break
 
+    // Detect bullet lines before sanitizing (→ gets replaced)
+    const isBullet = trimmed.startsWith('\u2192') || trimmed.startsWith('->')
+    const safe = sanitizeForPdf(trimmed)
+
     if (isSectionHeader(trimmed)) {
-      // Section headers: ALIMENTACIÓN, ENTRENAMIENTO, SUEÑO
-      if (y < height - 150) y -= SECTION_GAP // extra gap between sections (not before first)
-      page.drawText(trimmed, {
+      if (y < height - 150) y -= SECTION_GAP
+      page.drawText(safe, {
         x: MARGIN_LEFT,
         y,
         size: 10,
@@ -80,13 +99,12 @@ export async function generatePlanPdf(
         color: COLORS.heading,
       })
       y -= LINE_HEIGHT + 2
-    } else if (trimmed.startsWith('→') || trimmed.startsWith('->')) {
-      // Bullet points
-      const text = trimmed.replace(/^(→|->)\s*/, '')
-      const wrappedLines = wrapText(text, helvetica, 9, maxTextWidth - 12)
+    } else if (isBullet) {
+      const text = safe.replace(/^(>|->)\s*/, '')
+      const wrappedLines = wrapText(text, helvetica, 9, maxTextWidth - 15)
       for (let i = 0; i < wrappedLines.length; i++) {
         if (y < 40) break
-        const prefix = i === 0 ? '→  ' : '     '
+        const prefix = i === 0 ? '>  ' : '     '
         page.drawText(prefix + wrappedLines[i], {
           x: MARGIN_LEFT,
           y,
@@ -97,8 +115,7 @@ export async function generatePlanPdf(
         y -= LINE_HEIGHT
       }
     } else {
-      // Closing lines or other text
-      const wrappedLines = wrapText(trimmed, helvetica, 8.5, maxTextWidth)
+      const wrappedLines = wrapText(safe, helvetica, 8.5, maxTextWidth)
       for (const wl of wrappedLines) {
         if (y < 40) break
         page.drawText(wl, {
@@ -117,9 +134,9 @@ export async function generatePlanPdf(
 }
 
 function isSectionHeader(line: string): boolean {
-  const headers = ['ALIMENTACIÓN', 'ALIMENTACION', 'ENTRENAMIENTO', 'SUEÑO', 'SUENO']
-  const upper = line.toUpperCase().replace(/[^A-ZÁÉÍÓÚÑÜ]/g, '')
-  return headers.some(h => upper === h || upper.startsWith(h + ' '))
+  const normalized = line.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim()
+  const headers = ['ALIMENTACION', 'ENTRENAMIENTO', 'SUENO']
+  return headers.some(h => normalized === h || normalized.startsWith(h + ' '))
 }
 
 function wrapText(

@@ -33,7 +33,7 @@ SUEÑO Y DESCANSO:
 - Reducir estímulos de luz y pantallas al menos 1 hora antes de dormir.
 
 LÓGICA DE ANÁLISIS:
-1. Calcula la ventana de ayuno real del cliente: hora de última comida → hora de primera comida del día siguiente.
+1. Calcula la ventana de ayuno real del cliente: hora de última comida > hora de primera comida del día siguiente.
 2. Evalúa si los horarios ya son correctos. Si funcionan, reafírmalos — no los cambies.
 3. Identifica solo lo que necesita corrección y trabaja únicamente sobre eso.
 4. No inventes ni asumas datos que no están proporcionados.
@@ -45,16 +45,16 @@ FORMATO DE RESPUESTA:
 Responde SOLO con el contenido estructurado, sin markdown, sin encabezados extra. Usa este formato exacto:
 
 ALIMENTACIÓN
-→ [indicación 1]
-→ [indicación 2]
-→ [...]
+> [indicación 1]
+> [indicación 2]
+> [...]
 
 ENTRENAMIENTO
-→ [solo si hay implicación directa con alimentación o ayuno, si no, omitir esta sección entera]
+> [solo si hay implicación directa con alimentación o ayuno, si no, omitir esta sección entera]
 
 SUEÑO
-→ [indicación 1]
-→ [indicación 2]
+> [indicación 1]
+> [indicación 2]
 
 [2 líneas de cierre explicando qué se busca potenciar]`
 
