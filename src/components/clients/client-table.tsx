@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useMemo, useCallback } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Search, Plus, ClipboardList, Cake, ArrowRightCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PHASE_LABELS, HEALTH_COLORS, BADGE_CONFIG } from '@/lib/constants'
@@ -16,13 +16,34 @@ interface ClientTableProps {
 
 export function ClientTable({ clients }: ClientTableProps) {
   const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const coachParam = searchParams.get('coach')
   const coachSuffix = coachParam ? `?coach=${coachParam}` : ''
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [healthFilter, setHealthFilter] = useState<string>('all')
-  const [badgeFilter, setBadgeFilter] = useState<string>('all')
-  const [checkinFilter, setCheckinFilter] = useState<string>('all')
+
+  // Read filter values from URL search params (persist across navigation)
+  const search = searchParams.get('q') ?? ''
+  const statusFilter = searchParams.get('status') ?? 'all'
+  const healthFilter = searchParams.get('health') ?? 'all'
+  const badgeFilter = searchParams.get('badge') ?? 'all'
+  const checkinFilter = searchParams.get('checkin') ?? 'all'
+
+  const setFilter = useCallback((key: string, value: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (value === '' || value === 'all') {
+      params.delete(key)
+    } else {
+      params.set(key, value)
+    }
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }, [searchParams, router, pathname])
+
+  const setSearch = useCallback((value: string) => setFilter('q', value), [setFilter])
+  const setStatusFilter = useCallback((value: string) => setFilter('status', value), [setFilter])
+  const setHealthFilter = useCallback((value: string) => setFilter('health', value), [setFilter])
+  const setBadgeFilter = useCallback((value: string) => setFilter('badge', value), [setFilter])
+  const setCheckinFilter = useCallback((value: string) => setFilter('checkin', value), [setFilter])
 
   const filtered = useMemo(() => clients.filter((client) => {
     const matchesSearch =
