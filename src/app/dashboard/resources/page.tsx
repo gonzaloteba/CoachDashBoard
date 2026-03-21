@@ -43,7 +43,9 @@ export default function ResourcesPage() {
       .order('created_at', { ascending: false })
 
     if (error) {
+      console.error('Error fetching resources:', error)
       toast('Error al cargar recursos', 'error')
+      setLoading(false)
       return
     }
     setResources(data || [])
@@ -68,7 +70,8 @@ export default function ResourcesPage() {
     })
 
     if (error) {
-      toast('Error al guardar el recurso', 'error')
+      console.error('Error saving resource:', error)
+      toast('Error al guardar el recurso: ' + error.message, 'error')
       setSaving(false)
       return
     }
