@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { Search, Plus, ClipboardList, Cake, ArrowRightCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PHASE_LABELS, HEALTH_COLORS, BADGE_CONFIG } from '@/lib/constants'
@@ -14,6 +15,9 @@ interface ClientTableProps {
 }
 
 export function ClientTable({ clients }: ClientTableProps) {
+  const searchParams = useSearchParams()
+  const coachParam = searchParams.get('coach')
+  const coachSuffix = coachParam ? `?coach=${coachParam}` : ''
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [healthFilter, setHealthFilter] = useState<string>('all')
@@ -90,7 +94,7 @@ export function ClientTable({ clients }: ClientTableProps) {
           <option value="no">No</option>
         </select>
         <Link
-          href="/dashboard/clients/new"
+          href={`/dashboard/clients/new${coachSuffix}`}
           className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" />
@@ -141,7 +145,7 @@ export function ClientTable({ clients }: ClientTableProps) {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <Link
-                        href={`/dashboard/clients/${client.id}`}
+                        href={`/dashboard/clients/${client.id}${coachSuffix}`}
                         className="font-medium hover:underline"
                       >
                         {client.first_name} {client.last_name}

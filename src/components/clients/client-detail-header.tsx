@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, ExternalLink, Edit, Pencil, Check, X, Loader2 } from 'lucide-react'
 import { PHASE_LABELS, BADGE_CONFIG } from '@/lib/constants'
 import { getDaysRemaining } from '@/lib/health-score'
@@ -25,6 +25,9 @@ export function ClientDetailHeader({ client, alertCount }: ClientDetailHeaderPro
   const [isSuccessCase, setIsSuccessCase] = useState(client.is_success_case)
   const [togglingBadge, setTogglingBadge] = useState<string | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const coachParam = searchParams.get('coach')
+  const coachSuffix = coachParam ? `?coach=${coachParam}` : ''
 
   // Sync local state when server props update (after router.refresh)
   useEffect(() => { setIsRenewed(client.is_renewed) }, [client.is_renewed])
@@ -70,7 +73,7 @@ export function ClientDetailHeader({ client, alertCount }: ClientDetailHeaderPro
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
           <Link
-            href="/dashboard/clients"
+            href={`/dashboard/clients${coachSuffix}`}
             className="rounded-lg p-2 text-muted-foreground hover:bg-muted"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -158,7 +161,7 @@ export function ClientDetailHeader({ client, alertCount }: ClientDetailHeaderPro
             </a>
           )}
           <Link
-            href={`/dashboard/clients/${client.id}/edit`}
+            href={`/dashboard/clients/${client.id}/edit${coachSuffix}`}
             className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-muted"
           >
             <Edit className="h-3 w-3" />
