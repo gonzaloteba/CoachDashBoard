@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback, useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Search, Plus, ClipboardList, Cake, ArrowRightCircle } from 'lucide-react'
@@ -22,11 +22,20 @@ export function ClientTable({ clients }: ClientTableProps) {
   const coachSuffix = coachParam ? `?coach=${coachParam}` : ''
 
   // Read filter values from URL search params (persist across navigation)
-  const search = searchParams.get('q') ?? ''
+  const searchParam = searchParams.get('q') ?? ''
   const statusFilter = searchParams.get('status') ?? 'all'
   const healthFilter = searchParams.get('health') ?? 'all'
   const badgeFilter = searchParams.get('badge') ?? 'all'
   const checkinFilter = searchParams.get('checkin') ?? 'all'
+
+  // Local state for the search input to avoid lag from URL updates
+  const [search, setSearchLocal] = useState(searchParam)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Sync local state when URL param changes externally (e.g. back/forward navigation)
+  useEffect(() => {
+    setSearchLocal(searchParam)
+  }, [searchParam])
 
   const setFilter = useCallback((key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -39,7 +48,11 @@ export function ClientTable({ clients }: ClientTableProps) {
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
   }, [searchParams, router, pathname])
 
-  const setSearch = useCallback((value: string) => setFilter('q', value), [setFilter])
+  const setSearch = useCallback((value: string) => {
+    setSearchLocal(value)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => setFilter('q', value), 300)
+  }, [setFilter])
   const setStatusFilter = useCallback((value: string) => setFilter('status', value), [setFilter])
   const setHealthFilter = useCallback((value: string) => setFilter('health', value), [setFilter])
   const setBadgeFilter = useCallback((value: string) => setFilter('badge', value), [setFilter])
