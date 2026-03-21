@@ -141,7 +141,7 @@ export function ClientDetailHeader({ client, alertCount }: ClientDetailHeaderPro
               <span>
                 Inicio: {new Date(client.start_date + 'T12:00:00').toLocaleDateString('es-ES')}
               </span>
-              {client.timezone && <span>{client.timezone}</span>}
+              {client.location && <span>{client.location}</span>}
             </div>
           </div>
         </div>
