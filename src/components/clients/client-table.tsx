@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useCallback, useState, useEffect, useRef, useDeferredValue } from 'react'
+import { useMemo, useCallback, useState, useRef, useDeferredValue } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Search, Plus, ClipboardList, Cake, ArrowRightCircle } from 'lucide-react'
@@ -28,14 +28,16 @@ export function ClientTable({ clients }: ClientTableProps) {
   const badgeFilter = searchParams.get('badge') ?? 'all'
   const checkinFilter = searchParams.get('checkin') ?? 'all'
 
-  // Local state for the search input to avoid lag from URL updates
+  // Local state for the search input — completely decoupled from Next.js router
   const [search, setSearchLocal] = useState(searchParam)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Sync local state when URL param changes externally (e.g. back/forward navigation)
-  useEffect(() => {
-    setSearchLocal(searchParam)
-  }, [searchParam])
+  // Silently update the URL without triggering Next.js navigation
+  const replaceUrl = useCallback((params: URLSearchParams) => {
+    const qs = params.toString()
+    const url = qs ? `${pathname}?${qs}` : pathname
+    window.history.replaceState(null, '', url)
+  }, [pathname])
 
   const setFilter = useCallback((key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -44,15 +46,22 @@ export function ClientTable({ clients }: ClientTableProps) {
     } else {
       params.set(key, value)
     }
-    const qs = params.toString()
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }, [searchParams, router, pathname])
 
   const setSearch = useCallback((value: string) => {
     setSearchLocal(value)
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => setFilter('q', value), 300)
-  }, [setFilter])
+    debounceRef.current = setTimeout(() => {
+      const params = new URLSearchParams(window.location.search)
+      if (value === '') {
+        params.delete('q')
+      } else {
+        params.set('q', value)
+      }
+      replaceUrl(params)
+    }, 300)
+  }, [replaceUrl])
   const setStatusFilter = useCallback((value: string) => setFilter('status', value), [setFilter])
   const setHealthFilter = useCallback((value: string) => setFilter('health', value), [setFilter])
   const setBadgeFilter = useCallback((value: string) => setFilter('badge', value), [setFilter])
