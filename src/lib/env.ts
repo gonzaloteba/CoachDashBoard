@@ -12,6 +12,7 @@ const serverEnvSchema = z.object({
   TYPEFORM_WEBHOOK_SECRET: z.string().min(1),
   TYPEFORM_API_TOKEN: z.string().min(1),
   CRON_SECRET: z.string().min(1),
+  CALENDLY_API_TOKEN: z.string().min(1),
 })
 
 export const env = serverEnvSchema.parse(process.env)

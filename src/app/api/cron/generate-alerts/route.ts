@@ -240,6 +240,38 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 8. Upcoming scheduled calls (next 24 hours)
+    const tomorrow = new Date(now)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+
+    const { data: upcomingCalls, error: upcomingCallsError } = await supabase
+      .from('calls')
+      .select('client_id, scheduled_at, calendly_event_uri')
+      .not('scheduled_at', 'is', null)
+      .gte('scheduled_at', now.toISOString())
+      .lte('scheduled_at', tomorrow.toISOString())
+
+    if (upcomingCallsError) {
+      log.error('Failed to fetch upcoming calls', { error: upcomingCallsError.message })
+    }
+
+    for (const call of upcomingCalls || []) {
+      if (!alertExists(call.client_id, 'upcoming_call')) {
+        const client = clients.find(c => c.id === call.client_id)
+        if (!client) continue
+
+        const scheduledDate = new Date(call.scheduled_at)
+        const formattedTime = scheduledDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+
+        alertsToCreate.push({
+          client_id: call.client_id,
+          type: 'upcoming_call',
+          severity: 'medium',
+          message: `Llamada programada con ${client.first_name} ${client.last_name} hoy a las ${formattedTime}`,
+        })
+      }
+    }
+
     // Bulk insert alerts
     if (alertsToCreate.length > 0) {
       const { error } = await supabase.from('alerts').insert(alertsToCreate)
