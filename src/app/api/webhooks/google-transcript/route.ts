@@ -105,8 +105,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // No existing call — create a new one
-    // Resolve client_id
+    // No existing call with this google_event_id — resolve client first
     let clientId: string | null = body.client_id || null
 
     if (!clientId && body.client_first_name && body.client_last_name) {
@@ -118,14 +117,84 @@ export async function POST(request: NextRequest) {
       if (client) clientId = client.id
     }
 
-    // Resolve coach
     const coachId = await getDefaultCoachId()
-
     const callDate = body.call_date || new Date().toISOString().split('T')[0]
     const durationMinutes = typeof body.duration_minutes === 'number'
       ? body.duration_minutes
       : 15
 
+    // Check if there's a pre-scheduled call (from Calendly/Typeform) for this
+    // client on the same date that hasn't received a transcript yet.
+    let scheduledCall: { id: string } | null = null
+    if (clientId) {
+      const { data } = await supabase
+        .from('calls')
+        .select('id')
+        .eq('client_id', clientId)
+        .eq('call_date', callDate)
+        .not('scheduled_at', 'is', null)
+        .is('transcript', null)
+        .limit(1)
+        .single()
+      scheduledCall = data
+    }
+
+    if (scheduledCall) {
+      // Update the pre-scheduled call with transcript data
+      const updateData: Record<string, unknown> = {
+        google_event_id,
+        transcript,
+        duration_minutes: durationMinutes,
+      }
+      if (body.meet_link) updateData.meet_link = body.meet_link
+      if (body.notes) updateData.notes = body.notes
+
+      const { error: updateError } = await supabase
+        .from('calls')
+        .update(updateData)
+        .eq('id', scheduledCall.id)
+
+      if (updateError) {
+        return NextResponse.json(
+          { error: 'Failed to update scheduled call', detail: updateError.message },
+          { status: 500 }
+        )
+      }
+
+      // Generate coach actions
+      const clientName = body.client_first_name
+        ? `${body.client_first_name} ${body.client_last_name || ''}`.trim()
+        : undefined
+      const coachActions = await generateCoachActions(transcript, clientName)
+      if (coachActions) {
+        await supabase
+          .from('calls')
+          .update({ coach_actions: coachActions })
+          .eq('id', scheduledCall.id)
+      }
+
+      // Resolve upcoming_call alerts for this client
+      try {
+        await supabase
+          .from('alerts')
+          .update({ is_resolved: true, resolved_at: new Date().toISOString() })
+          .eq('client_id', clientId)
+          .eq('type', 'upcoming_call')
+          .eq('is_resolved', false)
+      } catch {
+        // Alert resolution is non-critical
+      }
+
+      return NextResponse.json({
+        success: true,
+        action: 'scheduled_call_completed',
+        call_id: scheduledCall.id,
+        client_id: clientId,
+        coach_actions_generated: !!coachActions,
+      })
+    }
+
+    // No scheduled call found — create a new one
     const insertData: Record<string, unknown> = {
       google_event_id,
       transcript,
@@ -150,7 +219,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate coach actions from transcript using AI (non-blocking for response)
+    // Generate coach actions from transcript using AI
     const clientName = body.client_first_name
       ? `${body.client_first_name} ${body.client_last_name || ''}`.trim()
       : undefined
@@ -160,6 +229,20 @@ export async function POST(request: NextRequest) {
         .from('calls')
         .update({ coach_actions: coachActions })
         .eq('id', newCall.id)
+    }
+
+    // Resolve upcoming_call alerts if client matched
+    if (clientId) {
+      try {
+        await supabase
+          .from('alerts')
+          .update({ is_resolved: true, resolved_at: new Date().toISOString() })
+          .eq('client_id', clientId)
+          .eq('type', 'upcoming_call')
+          .eq('is_resolved', false)
+      } catch {
+        // Alert resolution is non-critical
+      }
     }
 
     return NextResponse.json({
