@@ -20,6 +20,9 @@ import {
 } from '@/lib/typeform-helpers'
 import type { TypeformAnswer } from '@/lib/typeform-helpers'
 import { persistPhoto, persistPhotos } from '@/lib/photo-storage'
+import { logger } from '@/lib/logger'
+
+const log = logger('webhook:typeform')
 
 export async function POST(request: NextRequest) {
   try {
@@ -52,6 +55,13 @@ export async function POST(request: NextRequest) {
     const answers = formResponse.answers || []
     const responseId = formResponse.token
     const submittedAt = formResponse.submitted_at
+
+    log.info('Webhook received', {
+      formId,
+      responseId,
+      answerCount: answers.length,
+      answerTypes: answers.map((a: TypeformAnswer) => `${a.field?.id}:${a.type}`),
+    })
 
     // Build answer map by field id
     const answerMap = new Map<string, unknown>()
@@ -118,6 +128,7 @@ export async function POST(request: NextRequest) {
     const supabase = getAdminClient()
     let client = await findClientByName(supabase, firstName, lastName)
     let action: string
+    let calendlyAction: string | null = null
 
     if (formId === AUDIT_FORM_ID) {
       // Check for duplicate audit response
@@ -216,10 +227,29 @@ export async function POST(request: NextRequest) {
       try {
         const calendlyData = extractCalendlyData(answers as TypeformAnswer[])
         if (calendlyData && client) {
+          log.info('Calendly data found, creating scheduled call', {
+            clientId: client.id,
+            clientName: `${firstName} ${lastName}`,
+            scheduled_at: calendlyData.scheduled_at,
+            event_uri: calendlyData.event_uri || 'none',
+          })
           await createScheduledCall(supabase, client.id, calendlyData, firstName, lastName, defaultCoachId)
+          calendlyAction = 'call_scheduled'
+        } else {
+          log.info('No Calendly data in check-in submission', {
+            clientName: `${firstName} ${lastName}`,
+            answerTypes: (answers as TypeformAnswer[]).map((a: TypeformAnswer) => a.type),
+          })
+          calendlyAction = 'no_calendly_data'
         }
-      } catch {
-        // Calendly processing is non-critical — check-in is already saved
+      } catch (calendlyError) {
+        const errMsg = (calendlyError as Error).message
+        log.error('Failed to process Calendly scheduling data', {
+          clientId: client?.id || 'unknown',
+          clientName: `${firstName} ${lastName}`,
+          error: errMsg,
+        })
+        calendlyAction = `error: ${errMsg}`
       }
     } else {
       action = 'no_action'
@@ -230,6 +260,7 @@ export async function POST(request: NextRequest) {
       action,
       client_name: `${firstName} ${lastName}`,
       client_id: client?.id,
+      ...(calendlyAction ? { calendly: calendlyAction } : {}),
     })
   } catch (error) {
     return NextResponse.json(
@@ -436,7 +467,10 @@ async function createScheduledCall(
     .limit(1)
     .single()
 
-  if (existing) return // Already scheduled
+  if (existing) {
+    log.info('Duplicate scheduled call skipped', { clientId, scheduled_at: calendlyData.scheduled_at, existingCallId: existing.id })
+    return
+  }
 
   // Insert call with scheduled_at (no transcript yet — it's a future call)
   const { error: callError } = await supabase
@@ -451,7 +485,12 @@ async function createScheduledCall(
       notes: 'Llamada agendada desde Calendly (check-in)',
     })
 
-  if (callError) throw callError
+  if (callError) {
+    log.error('Failed to insert scheduled call', { clientId, error: callError.message, code: callError.code })
+    throw callError
+  }
+
+  log.info('Scheduled call created successfully', { clientId, callDate, scheduled_at: calendlyData.scheduled_at })
 
   // Create upcoming_call alert
   const formattedDate = scheduledDate.toLocaleDateString('es-ES', {
