@@ -13,10 +13,12 @@ import {
 } from '@/lib/typeform-mappings'
 import {
   extractValue,
+  extractCalendlyData,
   findClientByName,
   mapAuditFields,
   buildCheckInData,
 } from '@/lib/typeform-helpers'
+import type { TypeformAnswer } from '@/lib/typeform-helpers'
 import { persistPhoto, persistPhotos } from '@/lib/photo-storage'
 
 export async function POST(request: NextRequest) {
@@ -209,6 +211,16 @@ export async function POST(request: NextRequest) {
       }
       await handleCheckIn(supabase, client.id, answerMap, submittedAt, responseId)
       action = 'checkin_inserted'
+
+      // Process Calendly scheduling data (non-fatal)
+      try {
+        const calendlyData = extractCalendlyData(answers as TypeformAnswer[])
+        if (calendlyData && client) {
+          await createScheduledCall(supabase, client.id, calendlyData, firstName, lastName, defaultCoachId)
+        }
+      } catch {
+        // Calendly processing is non-critical — check-in is already saved
+      }
     } else {
       action = 'no_action'
     }
@@ -399,6 +411,65 @@ async function createInitialCheckIn(
     .insert(checkInData)
 
   if (error) throw error
+}
+
+// ============================================
+// Create scheduled call from Calendly data
+// ============================================
+async function createScheduledCall(
+  supabase: AdminClient,
+  clientId: string,
+  calendlyData: { scheduled_at: string; event_uri: string | null; invitee_uri: string | null },
+  firstName: string,
+  lastName: string,
+  coachId: string | null
+) {
+  const scheduledDate = new Date(calendlyData.scheduled_at)
+  const callDate = scheduledDate.toISOString().split('T')[0]
+
+  // Check for duplicate scheduled call (same client + same scheduled_at)
+  const { data: existing } = await supabase
+    .from('calls')
+    .select('id')
+    .eq('client_id', clientId)
+    .eq('scheduled_at', calendlyData.scheduled_at)
+    .limit(1)
+    .single()
+
+  if (existing) return // Already scheduled
+
+  // Insert call with scheduled_at (no transcript yet — it's a future call)
+  const { error: callError } = await supabase
+    .from('calls')
+    .insert({
+      client_id: clientId,
+      coach_id: coachId,
+      call_date: callDate,
+      scheduled_at: calendlyData.scheduled_at,
+      calendly_event_uri: calendlyData.event_uri,
+      duration_minutes: 15,
+      notes: 'Llamada agendada desde Calendly (check-in)',
+    })
+
+  if (callError) throw callError
+
+  // Create upcoming_call alert
+  const formattedDate = scheduledDate.toLocaleDateString('es-ES', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  await supabase
+    .from('alerts')
+    .insert({
+      client_id: clientId,
+      type: 'upcoming_call',
+      severity: 'high',
+      message: `Llamada programada con ${firstName} ${lastName} — ${formattedDate}`,
+    })
 }
 
 // ============================================

@@ -28,7 +28,19 @@ export interface TypeformAnswer {
   url?: string
   phone_number?: string
   date?: string
+  calendly?: {
+    scheduled_at?: string
+    event_uri?: string
+    invitee_uri?: string
+  }
   [key: string]: unknown
+}
+
+/** Calendly scheduling data extracted from Typeform */
+export interface CalendlyData {
+  scheduled_at: string
+  event_uri: string | null
+  invitee_uri: string | null
 }
 
 // ============================================
@@ -56,6 +68,8 @@ export function extractValue(answer: TypeformAnswer): unknown {
       return answer.phone_number
     case 'date':
       return answer.date ? answer.date.split('T')[0] : answer.date
+    case 'calendly':
+      return answer.calendly
     default:
       return answer[answer.type]
   }
@@ -275,6 +289,27 @@ export function mapAuditFields(answerMap: Map<string, unknown>, data: RowData) {
 // ============================================
 // Check-in data building
 // ============================================
+
+/**
+ * Extract Calendly scheduling data from Typeform answers.
+ * Scans all answers for a calendly-type field (there should be at most one).
+ */
+export function extractCalendlyData(answers: TypeformAnswer[]): CalendlyData | null {
+  for (const answer of answers) {
+    if (answer.type === 'calendly' && answer.calendly?.scheduled_at) {
+      log.info('Calendly scheduling data found', {
+        scheduled_at: answer.calendly.scheduled_at,
+        event_uri: answer.calendly.event_uri || null,
+      })
+      return {
+        scheduled_at: answer.calendly.scheduled_at,
+        event_uri: answer.calendly.event_uri || null,
+        invitee_uri: answer.calendly.invitee_uri || null,
+      }
+    }
+  }
+  return null
+}
 
 /** Build check-in row data from Typeform answers */
 export function buildCheckInData(

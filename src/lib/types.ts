@@ -8,6 +8,7 @@ export type AlertType =
   | 'no_call_logged'
   | 'program_ending'
   | 'birthday'
+  | 'upcoming_call'
 export type AlertSeverity = 'low' | 'medium' | 'high'
 export type UserRole = 'coach' | 'admin'
 export type HealthScore = 'green' | 'red'
@@ -130,6 +131,8 @@ export interface Call {
   transcript: string | null
   google_event_id: string | null
   meet_link: string | null
+  calendly_event_uri: string | null
+  scheduled_at: string | null
   coach_actions: string | null
   coach_actions_completed: boolean
   coach_actions_completed_items: number[]

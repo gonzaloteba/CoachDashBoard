@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, CheckCircle, Cake } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Cake, Phone } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -94,6 +94,8 @@ export function AlertList({ alerts }: AlertListProps) {
               <div className="flex items-start gap-4">
                 {alert.type === 'birthday' ? (
                   <Cake className="mt-0.5 h-5 w-5 shrink-0 text-pink-500" />
+                ) : alert.type === 'upcoming_call' ? (
+                  <Phone className="mt-0.5 h-5 w-5 shrink-0 text-blue-500" />
                 ) : (
                   <AlertTriangle
                     className={cn(

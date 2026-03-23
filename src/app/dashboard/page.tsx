@@ -6,6 +6,7 @@ import { KpiCards } from '@/components/dashboard/kpi-cards'
 import { ClientHealthChart } from '@/components/dashboard/client-health-chart'
 import { PhaseDistribution } from '@/components/dashboard/phase-distribution'
 import { CoachSelector } from '@/components/dashboard/coach-selector'
+import { UpcomingCalls } from '@/components/dashboard/upcoming-calls'
 import { startOfWeek, endOfWeek, startOfMonth } from 'date-fns'
 import { getCurrentCoach, isAdmin } from '@/lib/auth'
 import type { NutritionPhase } from '@/lib/types'
@@ -74,7 +75,16 @@ export default async function DashboardPage({ searchParams }: Props) {
   const safe = <T,>(promise: PromiseLike<{ data: T | null; error: unknown }>): Promise<{ data: T | null }> =>
     Promise.resolve(promise).then(r => ({ data: r.data })).catch(() => ({ data: null }))
 
-  const [clientsResult, checkinsResult, callsResult, alertsResult, allClientsResult, coachActionsResult] = await Promise.all([
+  // Fetch upcoming scheduled calls (next 7 days)
+  const upcomingCallsQuery = supabase
+    .from('calls')
+    .select('id, client_id, call_date, scheduled_at, meet_link, calendly_event_uri')
+    .not('scheduled_at', 'is', null)
+    .gte('scheduled_at', now.toISOString())
+    .order('scheduled_at', { ascending: true })
+    .limit(10)
+
+  const [clientsResult, checkinsResult, callsResult, alertsResult, allClientsResult, coachActionsResult, upcomingCallsResult] = await Promise.all([
     safe(clientsQuery),
     safe(supabase
       .from('check_ins')
@@ -95,6 +105,7 @@ export default async function DashboardPage({ searchParams }: Props) {
       .select('client_id')
       .not('coach_actions', 'is', null)
       .eq('coach_actions_completed', false)),
+    safe(upcomingCallsQuery),
   ])
 
   const clients = clientsResult.data
@@ -102,6 +113,16 @@ export default async function DashboardPage({ searchParams }: Props) {
   const pendingAlerts = alertsResult.data
   const allClients = allClientsResult.data
   const pendingCoachActions = coachActionsResult.data
+
+  // Build upcoming calls with client names
+  const rawUpcomingCalls = (upcomingCallsResult.data || []) as {
+    id: string
+    client_id: string
+    call_date: string
+    scheduled_at: string
+    meet_link: string | null
+    calendly_event_uri: string | null
+  }[]
 
   const activeClients = clients || []
   const activeClientIds = new Set(activeClients.map(c => c.id))
@@ -136,6 +157,15 @@ export default async function DashboardPage({ searchParams }: Props) {
   const cancelled = allClients?.filter((c) => c.status === 'cancelled').length || 0
   const retentionRate = total > 0 ? Math.round(((total - cancelled) / total) * 100) : 100
 
+  // Resolve client names for upcoming calls
+  const clientMap = new Map(activeClients.map(c => [c.id, { first_name: c.first_name, last_name: c.last_name }]))
+  const upcomingCalls = rawUpcomingCalls
+    .filter(c => activeClientIds.has(c.client_id))
+    .map(call => ({
+      ...call,
+      client: clientMap.get(call.client_id) || { first_name: 'Cliente', last_name: 'desconocido' },
+    }))
+
   const selectedCoachName = admin && selectedCoachId
     ? coaches.find(c => c.id === selectedCoachId)?.full_name ?? null
     : null
@@ -153,6 +183,8 @@ export default async function DashboardPage({ searchParams }: Props) {
           expectedCheckins={activeClients.length}
           retentionRate={retentionRate}
         />
+
+        <UpcomingCalls calls={upcomingCalls} />
 
         <div className="grid gap-6 lg:grid-cols-2">
           <ClientHealthChart green={green} red={red} />

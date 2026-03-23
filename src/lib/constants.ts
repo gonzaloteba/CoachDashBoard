@@ -39,6 +39,7 @@ export const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   no_call_logged: 'Llamada no registrada',
   program_ending: 'Programa por terminar',
   birthday: 'Cumpleaños',
+  upcoming_call: 'Llamada programada',
 }
 
 export const SEVERITY_COLORS: Record<AlertSeverity, string> = {
