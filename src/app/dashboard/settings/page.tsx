@@ -1,4 +1,5 @@
 import { Header } from '@/components/layout/header'
+import { CalendlySyncButton } from './calendly-sync-button'
 
 export default function SettingsPage() {
   return (
@@ -19,6 +20,20 @@ export default function SettingsPage() {
                 <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
                   Configurado
                 </span>
+              </div>
+              <div className="rounded-lg border p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="font-medium">Calendly</p>
+                    <p className="text-muted-foreground">
+                      Sincroniza llamadas programadas con el dashboard
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                    Configurado
+                  </span>
+                </div>
+                <CalendlySyncButton />
               </div>
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <div>
