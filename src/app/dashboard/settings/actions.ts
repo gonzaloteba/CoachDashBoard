@@ -262,11 +262,17 @@ export async function syncCalendlyNow(): Promise<{
       const activeInvitee = invitees.find(i => i.status === 'active')
       if (!activeInvitee) continue
 
-      const nameParts = activeInvitee.name.trim().split(/\s+/)
+      // Split name: handle both "Gonzalo Teba" and concatenated "GonzaloTeba"
+      let rawName = activeInvitee.name.trim()
+      // If name has no spaces but has camelCase (e.g. "GonzaloTeba"), split on uppercase boundaries
+      if (!rawName.includes(' ') && /[a-z][A-Z]/.test(rawName)) {
+        rawName = rawName.replace(/([a-z])([A-Z])/g, '$1 $2')
+      }
+      const nameParts = rawName.split(/\s+/)
       const firstName = nameParts[0] || ''
       const lastName = nameParts.slice(1).join(' ') || ''
 
-      debug.push(`Calendly invitee: "${activeInvitee.name}" (email: ${activeInvitee.email}) → firstName="${firstName}", lastName="${lastName}"`)
+      debug.push(`Calendly invitee: "${activeInvitee.name}" → split: "${firstName}" "${lastName}" (email: ${activeInvitee.email})`)
 
       // Try name matching first
       let matchedClient = findClientInList(clients || [], firstName, lastName)

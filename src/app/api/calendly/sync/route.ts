@@ -92,11 +92,30 @@ export async function POST(request: NextRequest) {
       }
 
       // Try to match invitee name to a client
-      const nameParts = activeInvitee.name.trim().split(/\s+/)
+      // Handle concatenated names like "GonzaloTeba" → "Gonzalo Teba"
+      let rawName = activeInvitee.name.trim()
+      if (!rawName.includes(' ') && /[a-z][A-Z]/.test(rawName)) {
+        rawName = rawName.replace(/([a-z])([A-Z])/g, '$1 $2')
+      }
+      const nameParts = rawName.split(/\s+/)
       const firstName = nameParts[0] || ''
       const lastName = nameParts.slice(1).join(' ') || ''
 
-      const matchedClient = findClientInList(clients || [], firstName, lastName)
+      let matchedClient = findClientInList(clients || [], firstName, lastName)
+
+      // Fallback: try email matching
+      if (!matchedClient && activeInvitee.email) {
+        const emailLower = activeInvitee.email.toLowerCase().trim()
+        const { data: emailMatch } = await supabase
+          .from('clients')
+          .select('id')
+          .ilike('email', emailLower)
+          .limit(1)
+          .single()
+        if (emailMatch) {
+          matchedClient = { id: emailMatch.id }
+        }
+      }
 
       if (!matchedClient) {
         log.warn('Could not match Calendly invitee to client', {

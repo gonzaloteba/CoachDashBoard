@@ -61,25 +61,39 @@ export async function POST(request: NextRequest) {
         invitees = []
       }
 
-      // Load clients for matching
+      // Load clients for matching (all clients, not just active)
       const { data: clients } = await supabase
         .from('clients')
-        .select('id, first_name, last_name')
-        .eq('status', 'active')
+        .select('id, first_name, last_name, email')
 
       const activeInvitee = invitees.find(i => i.status === 'active')
       let matchedClient: { id: string } | null = null
 
       if (activeInvitee && clients) {
-        const nameParts = activeInvitee.name.trim().split(/\s+/)
+        // Handle concatenated names like "GonzaloTeba" → "Gonzalo Teba"
+        let rawName = activeInvitee.name.trim()
+        if (!rawName.includes(' ') && /[a-z][A-Z]/.test(rawName)) {
+          rawName = rawName.replace(/([a-z])([A-Z])/g, '$1 $2')
+        }
+        const nameParts = rawName.split(/\s+/)
         const firstName = nameParts[0] || ''
         const lastName = nameParts.slice(1).join(' ') || ''
         matchedClient = findClientInList(clients, firstName, lastName)
+
+        // Fallback: email matching
+        if (!matchedClient && activeInvitee.email) {
+          const emailLower = activeInvitee.email.toLowerCase().trim()
+          const emailMatch = clients.find(
+            c => c.email && c.email.toLowerCase().trim() === emailLower
+          )
+          if (emailMatch) matchedClient = { id: emailMatch.id }
+        }
       }
 
       if (!matchedClient) {
         log.warn('Could not match Calendly invitee to client', {
           inviteeName: activeInvitee?.name,
+          inviteeEmail: activeInvitee?.email,
           eventUri,
         })
         return NextResponse.json({
