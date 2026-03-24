@@ -178,6 +178,35 @@ export async function POST(request: NextRequest) {
         // Initial check-in is non-critical — client was already created
       }
 
+      // Process Calendly scheduling data from audit form (non-fatal)
+      try {
+        const calendlyData = extractCalendlyData(answers as TypeformAnswer[])
+        if (calendlyData && client) {
+          log.info('Calendly data found in audit form, creating scheduled call', {
+            clientId: client.id,
+            clientName: `${firstName} ${lastName}`,
+            scheduled_at: calendlyData.scheduled_at,
+            event_uri: calendlyData.event_uri || 'none',
+          })
+          await createScheduledCall(supabase, client.id, calendlyData, firstName, lastName, defaultCoachId, 'audit')
+          calendlyAction = 'call_scheduled'
+        } else if (client) {
+          // No Calendly embed data — try to find upcoming events via Calendly API
+          log.info('No Calendly embed data in audit, checking Calendly API for upcoming events', {
+            clientName: `${firstName} ${lastName}`,
+          })
+          calendlyAction = await syncCalendlyForClient(supabase, client.id, firstName, lastName, defaultCoachId)
+        }
+      } catch (calendlyError) {
+        const errMsg = (calendlyError as Error).message
+        log.error('Failed to process Calendly scheduling data from audit', {
+          clientId: client?.id || 'unknown',
+          clientName: `${firstName} ${lastName}`,
+          error: errMsg,
+        })
+        calendlyAction = `error: ${errMsg}`
+      }
+
     } else if (formId === CHECKIN_FORM_ID) {
       // Check for duplicate check-in response
       if (responseId) {
@@ -454,7 +483,8 @@ async function createScheduledCall(
   calendlyData: { scheduled_at: string; event_uri: string | null; invitee_uri: string | null },
   firstName: string,
   lastName: string,
-  coachId: string | null
+  coachId: string | null,
+  source: 'check-in' | 'audit' = 'check-in'
 ) {
   const scheduledDate = new Date(calendlyData.scheduled_at)
   const callDate = scheduledDate.toISOString().split('T')[0]
@@ -483,7 +513,7 @@ async function createScheduledCall(
       scheduled_at: calendlyData.scheduled_at,
       calendly_event_uri: calendlyData.event_uri,
       duration_minutes: 15,
-      notes: 'Llamada agendada desde Calendly (check-in)',
+      notes: `Llamada agendada desde Calendly (${source})`,
     })
 
   if (callError) {
