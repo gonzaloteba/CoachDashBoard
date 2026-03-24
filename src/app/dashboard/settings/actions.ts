@@ -8,6 +8,51 @@ import { logger } from '@/lib/logger'
 
 const log = logger('actions:calendly-sync')
 
+export async function syncTypeformNow(): Promise<{
+  success: boolean
+  message: string
+}> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return { success: false, message: 'No autenticado' }
+  }
+
+  try {
+    const cronSecret = process.env.CRON_SECRET
+    if (!cronSecret) {
+      return { success: false, message: 'CRON_SECRET no configurado' }
+    }
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+      || 'http://localhost:3000'
+
+    const res = await fetch(`${baseUrl}/api/sync/typeform`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${cronSecret}` },
+    })
+
+    if (!res.ok) {
+      const text = await res.text()
+      return { success: false, message: `Error ${res.status}: ${text}` }
+    }
+
+    const data = await res.json()
+    const r = data.results
+    const parts: string[] = []
+    if (r?.audit?.created > 0) parts.push(`${r.audit.created} cliente(s) nuevo(s)`)
+    if (r?.audit?.updated > 0) parts.push(`${r.audit.updated} auditoría(s) actualizada(s)`)
+    if (r?.checkin?.inserted > 0) parts.push(`${r.checkin.inserted} check-in(s) sincronizado(s)`)
+    if (parts.length === 0) parts.push('No hay datos nuevos')
+
+    return { success: true, message: parts.join(', ') }
+  } catch (err) {
+    log.error('Manual Typeform sync failed', { error: (err as Error).message })
+    return { success: false, message: `Error: ${(err as Error).message}` }
+  }
+}
+
 export async function syncCalendlyNow(): Promise<{
   success: boolean
   message: string
