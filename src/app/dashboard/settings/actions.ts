@@ -147,8 +147,34 @@ export async function fixOrphanCalls(): Promise<{ success: boolean; message: str
     if (clientUpdateError) {
       return { success: false, message: `Error al actualizar clientes: ${clientUpdateError.message}`, fixed: 0 }
     }
-    parts.push(`${orphanClients.length} cliente(s) asignado(s)`)
+    parts.push(`${orphanClients.length} cliente(s) sin coach asignado(s)`)
     log.info('Fixed orphan clients', { count: orphanClients.length, coachId: coachRow.id })
+  }
+
+  // Fix clients with invalid coach_id (pointing to a non-existent coach)
+  const { data: allCoachIds } = await adminClient
+    .from('coaches')
+    .select('id')
+  const validCoachIds = new Set((allCoachIds || []).map(c => c.id))
+
+  const { data: allClients } = await adminClient
+    .from('clients')
+    .select('id, coach_id')
+    .not('coach_id', 'is', null)
+
+  const invalidClients = (allClients || []).filter(c => !validCoachIds.has(c.coach_id))
+  if (invalidClients.length > 0) {
+    const invalidIds = invalidClients.map(c => c.id)
+    const { error: fixError } = await adminClient
+      .from('clients')
+      .update({ coach_id: coachRow.id })
+      .in('id', invalidIds)
+
+    if (fixError) {
+      return { success: false, message: `Error al reparar coach_id inválidos: ${fixError.message}`, fixed: 0 }
+    }
+    parts.push(`${invalidClients.length} cliente(s) con coach inválido reparado(s)`)
+    log.info('Fixed clients with invalid coach_id', { count: invalidClients.length, coachId: coachRow.id })
   }
 
   if (parts.length === 0) {

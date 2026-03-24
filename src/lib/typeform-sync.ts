@@ -192,15 +192,17 @@ export async function runTypeformSync(): Promise<TypeformSyncResponse> {
         }
       } else {
         const updateData: Record<string, unknown> = { onboarding_submitted_at: submittedAt, onboarding_response_id: response.token }
-        // Always ensure coach_id is set
-        if (defaultCoachId) updateData.coach_id = defaultCoachId
         mapAuditFields(answerMap, updateData)
 
         const { data: existing } = await supabase
           .from('clients')
-          .select('start_date, end_date, renewal_date')
+          .select('start_date, end_date, renewal_date, coach_id')
           .eq('id', client.id)
           .single()
+        // Only backfill coach_id if it's currently null
+        if (existing && !existing.coach_id && defaultCoachId) {
+          updateData.coach_id = defaultCoachId
+        }
         if (existing && !existing.end_date) {
           const sd = existing.start_date || (submittedAt || new Date().toISOString()).split('T')[0]
           const ed = calculateEndDate(sd, 90)
