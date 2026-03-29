@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { PHASE_DURATIONS_DAYS } from '@/lib/constants'
@@ -115,6 +116,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         log.error('Failed to resolve phase_change alerts', { error: alertError.message, clientId: id })
       }
 
+      revalidatePath(`/dashboard/clients/${id}`)
       return NextResponse.json({ success: true })
     }
 
@@ -176,6 +178,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         log.error('Failed to resolve phase_change alerts', { error: alertError.message, clientId: id })
       }
 
+      revalidatePath(`/dashboard/clients/${id}`)
       return NextResponse.json({ success: true })
     }
 

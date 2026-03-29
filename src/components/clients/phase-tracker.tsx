@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { PHASE_LABELS, PHASE_DURATIONS_DAYS, PHASE_ALERT_DAYS_BEFORE } from '@/lib/constants'
 import { differenceInDays } from 'date-fns'
 import { AlertTriangle, Clock, Pencil, Check, X } from 'lucide-react'
+import { useToast } from '@/components/ui/toast'
 import type { NutritionPhase } from '@/lib/types'
 
 interface PhaseTrackerProps {
@@ -57,6 +58,7 @@ export function PhaseTracker({ clientId, currentPhase, startDate, endDate, phase
   const [saving, setSaving] = useState(false)
   const [changingPhase, setChangingPhase] = useState(false)
   const router = useRouter()
+  const { toast } = useToast()
 
   async function handlePhaseClick(newPhase: NutritionPhase) {
     if (newPhase === currentPhase || changingPhase) return
@@ -74,10 +76,16 @@ export function PhaseTracker({ clientId, currentPhase, startDate, endDate, phase
       })
 
       if (!res.ok) {
-        console.error('Phase update failed:', await res.text())
+        const text = await res.text()
+        console.error('Phase update failed:', text)
+        toast('No se pudo cambiar la fase. Intenta de nuevo.', 'error')
+        return
       }
 
       router.refresh()
+    } catch (err) {
+      console.error('Phase update error:', err)
+      toast('Error de conexión al cambiar la fase.', 'error')
     } finally {
       setChangingPhase(false)
     }
@@ -107,11 +115,17 @@ export function PhaseTracker({ clientId, currentPhase, startDate, endDate, phase
       })
 
       if (!res.ok) {
-        console.error('Interval update failed:', await res.text())
+        const text = await res.text()
+        console.error('Interval update failed:', text)
+        toast('No se pudo actualizar el intervalo.', 'error')
+        return
       }
 
       setEditing(false)
       router.refresh()
+    } catch (err) {
+      console.error('Interval update error:', err)
+      toast('Error de conexión al actualizar el intervalo.', 'error')
     } finally {
       setSaving(false)
     }
