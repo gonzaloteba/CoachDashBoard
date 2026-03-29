@@ -94,23 +94,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           .update({
             current_phase: phase,
             custom_phase_duration_days: custom_phase_duration_days ?? null,
+            phase_change_date: phaseChangeDate,
           })
           .eq('id', id)
 
         if (error) {
           return NextResponse.json({ error: error.message }, { status: 500 })
-        }
-
-        // Explicitly set phase_change_date (trigger may have set a different value for null custom)
-        if (custom_phase_duration_days && custom_phase_duration_days > 0) {
-          const { error: dateError } = await supabase
-            .from('clients')
-            .update({ phase_change_date: phaseChangeDate })
-            .eq('id', id)
-
-          if (dateError) {
-            log.error('Failed to set phase_change_date', { error: dateError.message, clientId: id })
-          }
         }
       }
 
