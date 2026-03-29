@@ -3,7 +3,7 @@
 import { useMemo, useCallback, useState, useRef, useDeferredValue } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { Search, Plus, ClipboardList, Cake, ArrowRightCircle } from 'lucide-react'
+import { Search, Plus, ClipboardList, Cake, ArrowRightCircle, StickyNote } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PHASE_LABELS, HEALTH_COLORS, BADGE_CONFIG, CHECKIN_GRACE_DAYS } from '@/lib/constants'
 import { StatusDropdown } from '@/components/clients/status-dropdown'
@@ -232,6 +232,15 @@ export function ClientTable({ clients }: ClientTableProps) {
                         >
                           <ClipboardList className="h-3 w-3" />
                           {client.pending_coach_actions}
+                        </span>
+                      )}
+                      {client.unresolved_alerts > 0 && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700"
+                          title={`${client.unresolved_alerts} alerta(s) pendiente(s)`}
+                        >
+                          <StickyNote className="h-3 w-3" />
+                          {client.unresolved_alerts}
                         </span>
                       )}
                     </div>

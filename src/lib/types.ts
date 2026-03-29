@@ -177,6 +177,7 @@ export interface ClientWithHealth extends Client {
   calls_this_month: number
   days_remaining: number
   pending_coach_actions: number
+  unresolved_alerts: number
   is_birthday_today: boolean
   has_pending_phase_change: boolean
 }

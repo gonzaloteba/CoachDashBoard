@@ -151,6 +151,7 @@ export default async function ClientsPage({ searchParams }: Props) {
       calls_this_month: callsCount,
       days_remaining: getDaysRemaining(client.end_date),
       pending_coach_actions: pendingActions,
+      unresolved_alerts: alertCount,
       is_birthday_today: isBirthdayToday,
       has_pending_phase_change: hasPendingPhaseChange,
     }
