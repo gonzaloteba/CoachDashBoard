@@ -9,6 +9,7 @@ export type AlertType =
   | 'program_ending'
   | 'birthday'
   | 'upcoming_call'
+  | 'manual'
 export type AlertSeverity = 'low' | 'medium' | 'high'
 export type UserRole = 'coach' | 'admin'
 export type HealthScore = 'green' | 'red'

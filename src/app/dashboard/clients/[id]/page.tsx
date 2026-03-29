@@ -69,7 +69,11 @@ export default async function ClientDetailPage({ params }: Props) {
       <div className="p-6 space-y-6">
         <ClientDetailHeader client={client} alertCount={alerts?.length || 0} />
 
-        <PendingAlerts alerts={alerts || []} />
+        <PendingAlerts
+          alerts={alerts || []}
+          clientId={client.id}
+          clientName={`${client.first_name} ${client.last_name}`}
+        />
 
         <PendingCoachActions calls={calls || []} />
 

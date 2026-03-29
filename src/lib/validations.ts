@@ -97,6 +97,16 @@ export const toggleBadgeSchema = z.object({
 })
 
 // ============================================
+// Manual alert creation
+// ============================================
+
+export const createAlertSchema = z.object({
+  client_id: clientIdSchema,
+  severity: z.enum(['low', 'medium', 'high']),
+  message: z.string().min(1, 'El mensaje es obligatorio').max(500),
+})
+
+// ============================================
 // Typeform webhook payload
 // ============================================
 
