@@ -78,12 +78,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       const isIndefinite = custom_phase_duration_days === INDEFINITE || (phase === 3 && custom_phase_duration_days === undefined)
 
       if (isIndefinite) {
-        // Indefinite: no phase_change_date, store -1 as sentinel
+        // Indefinite: no phase_change_date
         const { error } = await supabase
           .from('clients')
           .update({
             current_phase: phase,
-            custom_phase_duration_days: INDEFINITE,
             phase_change_date: null,
           })
           .eq('id', id)
@@ -105,7 +104,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           .from('clients')
           .update({
             current_phase: phase,
-            custom_phase_duration_days: custom_phase_duration_days ?? null,
             phase_change_date: phaseChangeDate,
           })
           .eq('id', id)
@@ -140,7 +138,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         const { error } = await supabase
           .from('clients')
           .update({
-            custom_phase_duration_days: INDEFINITE,
             phase_change_date: null,
           })
           .eq('id', id)
@@ -168,7 +165,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         const { error } = await supabase
           .from('clients')
           .update({
-            custom_phase_duration_days: custom_phase_duration_days ?? null,
             phase_change_date: phaseChangeDate,
           })
           .eq('id', id)
