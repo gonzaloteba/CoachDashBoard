@@ -130,6 +130,7 @@ export interface Call {
   duration_minutes: number
   notes: string | null
   transcript: string | null
+  transcript_summary: string | null
   google_event_id: string | null
   meet_link: string | null
   calendly_event_uri: string | null

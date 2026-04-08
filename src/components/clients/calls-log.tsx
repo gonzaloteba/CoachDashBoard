@@ -169,6 +169,7 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
         ) : (
           calls.map((call) => {
             const isExpanded = expandedCall === call.id
+            const hasSummary = !!call.transcript_summary
             const hasTranscript = !!call.transcript
             const hasCoachActions = !!call.coach_actions
             const actionsPending = hasCoachActions && !call.coach_actions_completed
@@ -193,10 +194,10 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
                       <span className="text-xs text-muted-foreground">
                         {call.duration_minutes} min
                       </span>
-                      {hasTranscript && (
+                      {(hasSummary || hasTranscript) && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">
                           <FileText className="h-3 w-3" />
-                          Transcript
+                          {hasSummary ? 'Resumen' : 'Transcript'}
                         </span>
                       )}
                       {call.meet_link && (
@@ -221,7 +222,7 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
                       <p className="mt-1 text-xs text-muted-foreground line-clamp-1">{call.notes}</p>
                     )}
                   </div>
-                  {(hasTranscript || call.notes || hasCoachActions) && (
+                  {(hasSummary || hasTranscript || call.notes || hasCoachActions) && (
                     isExpanded
                       ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
                       : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
@@ -249,7 +250,19 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
                         <p className="text-sm whitespace-pre-wrap">{call.notes}</p>
                       </div>
                     )}
-                    {hasTranscript && (
+                    {hasSummary && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">
+                          Resumen de la llamada
+                        </p>
+                        <div className="rounded-lg bg-blue-50/50 border border-blue-100 p-3">
+                          <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                            {call.transcript_summary}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {hasTranscript && !hasSummary && (
                       <div>
                         <p className="text-xs font-medium text-muted-foreground mb-1">
                           Transcript de Gemini

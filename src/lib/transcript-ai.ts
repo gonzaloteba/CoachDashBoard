@@ -4,6 +4,72 @@ import { logger } from '@/lib/logger'
 const log = logger('transcript:ai')
 
 /**
+ * Generate a brief summary of a coaching call transcript.
+ * The summary gives the coach quick context about what was discussed,
+ * so the client feels remembered on the next call.
+ */
+export async function generateTranscriptSummary(
+  transcript: string,
+  clientName?: string
+): Promise<string | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) {
+    log.warn('ANTHROPIC_API_KEY not configured, skipping transcript summary generation')
+    return null
+  }
+
+  try {
+    const client = new Anthropic({ apiKey })
+
+    const clientContext = clientName
+      ? `El cliente se llama ${clientName}.`
+      : 'No se conoce el nombre del cliente.'
+
+    const message = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 512,
+      messages: [
+        {
+          role: 'user',
+          content: `Eres un asistente para un coach de salud y nutrición. Genera un resumen breve y útil de la siguiente llamada de coaching.
+
+${clientContext}
+
+Reglas:
+- El resumen debe ser de 3-5 líneas máximo
+- Incluye los temas principales discutidos, decisiones tomadas y compromisos del cliente
+- Escribe en tercera persona (ej: "Se revisó...", "Se acordó...")
+- El objetivo es que el coach tenga contexto rápido para la próxima llamada
+- No incluyas saludos ni despedidas de la llamada
+- Sé conciso y directo
+- Responde SOLO con el resumen, sin títulos ni introducción
+
+Transcript:
+${transcript.substring(0, 15000)}`,
+        },
+      ],
+    })
+
+    const result = message.content[0]
+    if (result.type === 'text' && result.text.trim()) {
+      log.info('Transcript summary generated successfully', {
+        clientName,
+        summaryLength: result.text.length,
+      })
+      return result.text.trim()
+    }
+
+    return null
+  } catch (error) {
+    log.error('Failed to generate transcript summary', {
+      error: (error as Error).message,
+      clientName,
+    })
+    return null
+  }
+}
+
+/**
  * Analyze a coaching call transcript and extract actionable items for the coach.
  * Returns a string with the coach actions, or null if analysis fails.
  */

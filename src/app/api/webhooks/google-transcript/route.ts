@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { getDefaultCoachId } from '@/lib/auth'
 import { findClientByName } from '@/lib/typeform-helpers'
-import { generateCoachActions } from '@/lib/transcript-ai'
+import { generateCoachActions, generateTranscriptSummary } from '@/lib/transcript-ai'
 
 /**
  * POST /api/webhooks/google-transcript
@@ -73,11 +73,14 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (existingCall) {
-      // Generate coach actions from updated transcript
+      // Generate coach actions and summary from updated transcript
       const clientNameForUpdate = body.client_first_name
         ? `${body.client_first_name} ${body.client_last_name || ''}`.trim()
         : undefined
-      const updatedActions = await generateCoachActions(transcript, clientNameForUpdate)
+      const [updatedActions, updatedSummary] = await Promise.all([
+        generateCoachActions(transcript, clientNameForUpdate),
+        generateTranscriptSummary(transcript, clientNameForUpdate),
+      ])
 
       // Update transcript on existing call
       const { error: updateError } = await supabase
@@ -87,6 +90,7 @@ export async function POST(request: NextRequest) {
           ...(body.meet_link ? { meet_link: body.meet_link } : {}),
           ...(body.notes ? { notes: body.notes } : {}),
           ...(updatedActions ? { coach_actions: updatedActions, coach_actions_completed: false } : {}),
+          ...(updatedSummary ? { transcript_summary: updatedSummary } : {}),
         })
         .eq('id', existingCall.id)
 
@@ -161,15 +165,21 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Generate coach actions
+      // Generate coach actions and summary
       const clientName = body.client_first_name
         ? `${body.client_first_name} ${body.client_last_name || ''}`.trim()
         : undefined
-      const coachActions = await generateCoachActions(transcript, clientName)
-      if (coachActions) {
+      const [coachActions, transcriptSummary] = await Promise.all([
+        generateCoachActions(transcript, clientName),
+        generateTranscriptSummary(transcript, clientName),
+      ])
+      const aiUpdates: Record<string, unknown> = {}
+      if (coachActions) aiUpdates.coach_actions = coachActions
+      if (transcriptSummary) aiUpdates.transcript_summary = transcriptSummary
+      if (Object.keys(aiUpdates).length > 0) {
         await supabase
           .from('calls')
-          .update({ coach_actions: coachActions })
+          .update(aiUpdates)
           .eq('id', scheduledCall.id)
       }
 
@@ -220,15 +230,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate coach actions from transcript using AI
+    // Generate coach actions and summary from transcript using AI
     const clientName = body.client_first_name
       ? `${body.client_first_name} ${body.client_last_name || ''}`.trim()
       : undefined
-    const coachActions = await generateCoachActions(transcript, clientName)
-    if (coachActions) {
+    const [coachActions, transcriptSummary] = await Promise.all([
+      generateCoachActions(transcript, clientName),
+      generateTranscriptSummary(transcript, clientName),
+    ])
+    const newCallAiUpdates: Record<string, unknown> = {}
+    if (coachActions) newCallAiUpdates.coach_actions = coachActions
+    if (transcriptSummary) newCallAiUpdates.transcript_summary = transcriptSummary
+    if (Object.keys(newCallAiUpdates).length > 0) {
       await supabase
         .from('calls')
-        .update({ coach_actions: coachActions })
+        .update(newCallAiUpdates)
         .eq('id', newCall.id)
     }
 
