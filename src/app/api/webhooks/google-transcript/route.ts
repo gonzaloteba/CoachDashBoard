@@ -18,8 +18,9 @@ import { generateCoachActions, generateTranscriptSummary } from '@/lib/transcrip
  *   - transcript: string (required) — Full transcript text
  *   - call_date: string (optional) — ISO date (YYYY-MM-DD), defaults to today
  *   - duration_minutes: number (optional) — Call duration, defaults to 15
- *   - client_first_name: string (optional) — To auto-match client
+ *   - client_first_name: string (optional) — To auto-match client (can contain full name)
  *   - client_last_name: string (optional) — To auto-match client
+ *   - client_name: string (optional) — Full name alternative to first/last split
  *   - client_id: string (optional) — Direct client UUID if known
  *   - notes: string (optional) — Additional notes
  */
@@ -112,13 +113,36 @@ export async function POST(request: NextRequest) {
     // No existing call with this google_event_id — resolve client first
     let clientId: string | null = body.client_id || null
 
-    if (!clientId && body.client_first_name && body.client_last_name) {
-      const client = await findClientByName(
-        supabase,
-        body.client_first_name,
-        body.client_last_name
-      )
-      if (client) clientId = client.id
+    if (!clientId) {
+      // Resolve first/last name — handle cases where:
+      // - Full name is in client_first_name only (e.g. "Elvis Florentino")
+      // - Full name is in a separate client_name field
+      // - Both fields are provided normally
+      let firstName = (body.client_first_name || '').trim()
+      let lastName = (body.client_last_name || '').trim()
+
+      // If we have a client_name field, use it to split
+      if (!firstName && !lastName && body.client_name) {
+        const parts = body.client_name.trim().split(/\s+/)
+        firstName = parts[0] || ''
+        lastName = parts.slice(1).join(' ') || ''
+      }
+
+      // If only first_name is provided and contains spaces, split it
+      if (firstName && !lastName && firstName.includes(' ')) {
+        const parts = firstName.split(/\s+/)
+        firstName = parts[0]
+        lastName = parts.slice(1).join(' ')
+      }
+
+      if (firstName) {
+        const client = await findClientByName(
+          supabase,
+          firstName,
+          lastName
+        )
+        if (client) clientId = client.id
+      }
     }
 
     const coachId = await getDefaultCoachId()
@@ -129,11 +153,11 @@ export async function POST(request: NextRequest) {
 
     // Check if there's a pre-scheduled call (from Calendly/Typeform) for this
     // client on the same date that hasn't received a transcript yet.
-    let scheduledCall: { id: string } | null = null
+    let scheduledCall: { id: string; client_id: string | null } | null = null
     if (clientId) {
       const { data } = await supabase
         .from('calls')
-        .select('id')
+        .select('id, client_id')
         .eq('client_id', clientId)
         .eq('call_date', callDate)
         .not('scheduled_at', 'is', null)
@@ -141,6 +165,24 @@ export async function POST(request: NextRequest) {
         .limit(1)
         .single()
       scheduledCall = data
+    }
+
+    // Fallback: if client not resolved, try to find a pre-scheduled call
+    // by matching the Google Meet link (Calendly stores the same meet_link)
+    if (!scheduledCall && body.meet_link) {
+      const { data } = await supabase
+        .from('calls')
+        .select('id, client_id')
+        .eq('meet_link', body.meet_link)
+        .eq('call_date', callDate)
+        .is('transcript', null)
+        .limit(1)
+        .single()
+      if (data) {
+        scheduledCall = data
+        // Inherit client_id from the pre-scheduled call
+        if (!clientId && data.client_id) clientId = data.client_id
+      }
     }
 
     if (scheduledCall) {
