@@ -15,22 +15,34 @@ const log = logger('api:webhooks:google-transcript')
  * Safely run all three AI generation functions.
  * Returns the results + whether AI was skipped due to missing config.
  * Never throws — if the API key is missing or AI fails, the call is still saved.
+ * Retries once on transient errors (rate limit, credit issues, network).
  */
 async function safeGenerateAI(transcript: string, clientName?: string) {
-  try {
+  async function attempt() {
     const [actions, summary, highlights] = await Promise.all([
       generateCoachActions(transcript, clientName),
       generateTranscriptSummary(transcript, clientName),
       generatePositiveHighlights(transcript, clientName),
     ])
     return { actions, summary, highlights, apiKeyMissing: false }
+  }
+
+  try {
+    return await attempt()
   } catch (error) {
     if (error instanceof ApiKeyMissingError) {
       log.warn('ANTHROPIC_API_KEY not configured — transcript saved without AI summary. Add it in Vercel → Settings → Environment Variables.')
       return { actions: null, summary: null, highlights: null, apiKeyMissing: true }
     }
-    log.error('Unexpected error during AI generation', { error: (error as Error).message })
-    return { actions: null, summary: null, highlights: null, apiKeyMissing: false }
+    // Retry once after 2s for transient errors (rate limit, credit issues, etc.)
+    log.warn('AI generation failed, retrying in 2s', { error: (error as Error).message })
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    try {
+      return await attempt()
+    } catch (retryError) {
+      log.error('AI generation failed after retry', { error: (retryError as Error).message })
+      return { actions: null, summary: null, highlights: null, apiKeyMissing: false }
+    }
   }
 }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Phone, Plus, ChevronDown, ChevronUp, FileText, Video, ExternalLink, ClipboardList, CheckCircle2, Loader2, Sparkles, Clock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -20,8 +20,36 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
   const [expandedCall, setExpandedCall] = useState<string | null>(null)
   const [completingAction, setCompletingAction] = useState<string | null>(null)
   const [regeneratingAI, setRegeneratingAI] = useState<string | null>(null)
+  const autoRegenTriggered = useRef<Set<string>>(new Set())
   const router = useRouter()
   const { toast } = useToast()
+
+  // Auto-regenerate AI for calls with transcript but missing summary/highlights/actions
+  useEffect(() => {
+    const callsMissingAI = calls.filter(
+      (call) =>
+        call.transcript &&
+        (!call.transcript_summary || !call.positive_highlights || !call.coach_actions) &&
+        !autoRegenTriggered.current.has(call.id)
+    )
+
+    if (callsMissingAI.length === 0) return
+
+    async function autoRegenerate() {
+      for (const call of callsMissingAI) {
+        autoRegenTriggered.current.add(call.id)
+        setRegeneratingAI(call.id)
+        const result = await regenerateCallAI(call.id)
+        setRegeneratingAI(null)
+        if (result.success) {
+          toast('Resumen generado automáticamente', 'success')
+          router.refresh()
+        }
+      }
+    }
+
+    autoRegenerate()
+  }, [calls, router, toast])
 
   async function handleAddCall(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -215,10 +243,17 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
                         </span>
                       )}
                       {!hasSummary && hasTranscript && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                          <Clock className="h-3 w-3" />
-                          Procesando...
-                        </span>
+                        regeneratingAI === call.id ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Generando IA...
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                            <Clock className="h-3 w-3" />
+                            Pendiente IA
+                          </span>
+                        )
                       )}
                       {hasPositiveHighlights && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700">
@@ -282,22 +317,24 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
                     {hasTranscript && (!hasSummary || !hasPositiveHighlights || !hasCoachActions) && (
                       <div className={cn(!call.meet_link && !call.notes && 'pt-3')}>
                         {regeneratingAI === call.id ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-blue-600">
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            Generando resumen...
-                          </span>
+                          <div className="flex items-center gap-2 rounded-lg bg-blue-50 border border-blue-200 p-3">
+                            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                            <span className="text-sm text-blue-700 font-medium">
+                              Generando resumen y acciones con IA...
+                            </span>
+                          </div>
                         ) : (
                           <div className="flex items-center gap-3">
-                            <span className="inline-flex items-center gap-1.5 text-xs text-amber-600">
-                              <Clock className="h-3 w-3" />
-                              Procesamiento automatico pendiente
-                            </span>
                             <button
                               onClick={() => handleRegenerateAI(call.id)}
-                              className="text-[10px] text-muted-foreground underline hover:text-foreground"
+                              className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-700 transition-colors"
                             >
-                              Reintentar ahora
+                              <Sparkles className="h-3.5 w-3.5" />
+                              Generar resumen y acciones
                             </button>
+                            <span className="text-[10px] text-muted-foreground">
+                              Transcript disponible
+                            </span>
                           </div>
                         )}
                       </div>
