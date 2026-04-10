@@ -4,13 +4,12 @@ import { createClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/header'
 import { KpiCards } from '@/components/dashboard/kpi-cards'
 import { ClientHealthChart } from '@/components/dashboard/client-health-chart'
-import { PhaseDistribution } from '@/components/dashboard/phase-distribution'
+import { EndingSoonClients } from '@/components/dashboard/ending-soon-clients'
 import { CoachSelector } from '@/components/dashboard/coach-selector'
 import { UpcomingCalls } from '@/components/dashboard/upcoming-calls'
-import { startOfMonth, differenceInDays } from 'date-fns'
+import { startOfMonth, differenceInCalendarDays, differenceInDays } from 'date-fns'
 import { getCurrentCoach, isAdmin } from '@/lib/auth'
 import { CHECKIN_GRACE_DAYS } from '@/lib/constants'
-import type { NutritionPhase } from '@/lib/types'
 
 interface Props {
   searchParams: Promise<{ coach?: string }>
@@ -153,18 +152,21 @@ export default async function DashboardPage({ searchParams }: Props) {
 
   let green = 0
   let red = 0
-  const phaseDistribution: Record<NutritionPhase, number> = { 1: 0, 2: 0, 3: 0 }
 
   for (const client of activeClients) {
     const hasIssue = alertClientIds.has(client.id) || coachActionClientIds.has(client.id) || !recentCheckinClientIds.has(client.id)
     if (hasIssue) red++
     else green++
-
-    const phase = client.current_phase as NutritionPhase
-    if (phase >= 1 && phase <= 3) {
-      phaseDistribution[phase] = (phaseDistribution[phase] || 0) + 1
-    }
   }
+
+  // Clients whose program ends in less than 30 days
+  const endingSoonClients = activeClients
+    .map((client) => {
+      const daysRemaining = differenceInCalendarDays(new Date(client.end_date), now)
+      return { id: client.id, first_name: client.first_name, last_name: client.last_name, end_date: client.end_date, days_remaining: daysRemaining }
+    })
+    .filter((c) => c.days_remaining >= 0 && c.days_remaining < 30)
+    .sort((a, b) => a.days_remaining - b.days_remaining)
 
   // Retention rate
   const total = allClients?.length || 0
@@ -202,7 +204,7 @@ export default async function DashboardPage({ searchParams }: Props) {
 
         <div className="grid gap-6 lg:grid-cols-2">
           <ClientHealthChart green={green} red={red} />
-          <PhaseDistribution distribution={phaseDistribution} />
+          <EndingSoonClients clients={endingSoonClients} />
         </div>
       </div>
     </div>
