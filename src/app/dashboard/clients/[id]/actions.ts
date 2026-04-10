@@ -288,8 +288,9 @@ export async function regenerateCallAI(callId: string) {
       .eq('id', parsed.data)
 
     if (error) {
-      log.error('Failed to save regenerated AI content', { callId, error: error.message })
-      return { success: false, error: 'Error al guardar el contenido generado' }
+      log.error('Failed to save regenerated AI content', { callId, error: error.message, code: error.code, details: error.details })
+      // Surface the real DB error so we can diagnose
+      return { success: false, error: `Error al guardar: ${error.message}` }
     }
 
     revalidateDashboard()
