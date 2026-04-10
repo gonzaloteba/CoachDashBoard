@@ -198,12 +198,13 @@ export default async function DashboardPage({ searchParams }: Props) {
           checkinsOnTime={recentCheckinClientIds.size}
           expectedCheckins={activeClients.length}
           retentionRate={retentionRate}
+          coachId={filterCoachId}
         />
 
         <UpcomingCalls calls={upcomingCalls} />
 
         <div className="grid gap-6 lg:grid-cols-2">
-          <ClientHealthChart green={green} red={red} />
+          <ClientHealthChart green={green} red={red} coachId={filterCoachId} />
           <EndingSoonClients clients={endingSoonClients} />
         </div>
       </div>

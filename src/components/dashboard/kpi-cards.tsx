@@ -1,4 +1,5 @@
-import { Users, ClipboardCheck, TrendingUp } from 'lucide-react'
+import Link from 'next/link'
+import { Users, ClipboardCheck, TrendingUp, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface KpiCardProps {
@@ -7,9 +8,11 @@ interface KpiCardProps {
   subtitle?: string
   icon: React.ReactNode
   trend?: { value: number; positive: boolean }
+  href?: string
+  linkLabel?: string
 }
 
-function KpiCard({ title, value, subtitle, icon, trend }: KpiCardProps) {
+function KpiCard({ title, value, subtitle, icon, trend, href, linkLabel }: KpiCardProps) {
   return (
     <div className="rounded-xl border bg-card p-6 shadow-sm">
       <div className="flex items-center justify-between">
@@ -32,6 +35,15 @@ function KpiCard({ title, value, subtitle, icon, trend }: KpiCardProps) {
           </p>
         )}
       </div>
+      {href && (
+        <Link
+          href={href}
+          className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+        >
+          {linkLabel ?? 'Ver detalle'}
+          <ArrowRight className="h-3 w-3" />
+        </Link>
+      )}
     </div>
   )
 }
@@ -41,6 +53,7 @@ interface KpiCardsProps {
   checkinsOnTime: number
   expectedCheckins: number
   retentionRate: number
+  coachId?: string | null
 }
 
 export function KpiCards({
@@ -48,10 +61,13 @@ export function KpiCards({
   checkinsOnTime,
   expectedCheckins,
   retentionRate,
+  coachId,
 }: KpiCardsProps) {
   const checkinRate = expectedCheckins > 0
     ? Math.round((checkinsOnTime / expectedCheckins) * 100)
     : 0
+
+  const coachSuffix = coachId ? `&coach=${coachId}` : ''
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -65,6 +81,8 @@ export function KpiCards({
         value={`${checkinsOnTime}/${expectedCheckins}`}
         subtitle={`${checkinRate}% completado`}
         icon={<ClipboardCheck className="h-4 w-4 text-muted-foreground" />}
+        href={`/dashboard/clients?status=active&checkin=no${coachSuffix}`}
+        linkLabel="Ver check-ins pendientes"
       />
       <KpiCard
         title="Tasa de Retención"

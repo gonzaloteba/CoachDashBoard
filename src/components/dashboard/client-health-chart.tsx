@@ -1,10 +1,13 @@
 'use client'
 
+import Link from 'next/link'
+import { ArrowRight } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
 
 interface ClientHealthChartProps {
   green: number
   red: number
+  coachId?: string | null
 }
 
 const COLORS = {
@@ -17,7 +20,7 @@ const LABELS = {
   red: 'Con pendientes',
 }
 
-export function ClientHealthChart({ green, red }: ClientHealthChartProps) {
+export function ClientHealthChart({ green, red, coachId }: ClientHealthChartProps) {
   const data = [
     { name: LABELS.green, value: green, color: COLORS.green },
     { name: LABELS.red, value: red, color: COLORS.red },
@@ -30,6 +33,8 @@ export function ClientHealthChart({ green, red }: ClientHealthChartProps) {
       </div>
     )
   }
+
+  const coachSuffix = coachId ? `&coach=${coachId}` : ''
 
   return (
     <div className="rounded-xl border bg-card p-6 shadow-sm">
@@ -57,6 +62,15 @@ export function ClientHealthChart({ green, red }: ClientHealthChartProps) {
           <Legend />
         </PieChart>
       </ResponsiveContainer>
+      {red > 0 && (
+        <Link
+          href={`/dashboard/clients?status=active&health=red${coachSuffix}`}
+          className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+        >
+          Ver clientes con pendientes
+          <ArrowRight className="h-3 w-3" />
+        </Link>
+      )}
     </div>
   )
 }
