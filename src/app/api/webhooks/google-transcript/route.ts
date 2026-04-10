@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { getDefaultCoachId } from '@/lib/auth'
 import { findClientByName } from '@/lib/typeform-helpers'
-import { generateCoachActions, generateTranscriptSummary, generatePositiveHighlights, ApiKeyMissingError } from '@/lib/transcript-ai'
+import { generateCoachActions, generateTranscriptSummary, generatePositiveHighlights, ApiKeyMissingError, AnthropicApiError } from '@/lib/transcript-ai'
 import { createAlertsFromCoachActions } from '@/lib/call-alerts'
 import { logger } from '@/lib/logger'
 
@@ -34,13 +34,15 @@ async function safeGenerateAI(transcript: string, clientName?: string) {
       log.warn('ANTHROPIC_API_KEY not configured — transcript saved without AI summary. Add it in Vercel → Settings → Environment Variables.')
       return { actions: null, summary: null, highlights: null, apiKeyMissing: true }
     }
-    // Retry once after 2s for transient errors (rate limit, credit issues, etc.)
-    log.warn('AI generation failed, retrying in 2s', { error: (error as Error).message })
+    // Retry once after 2s for transient errors (rate limit, overloaded, etc.)
+    const errorMsg = error instanceof AnthropicApiError ? error.message : (error as Error).message
+    log.warn('AI generation failed, retrying in 2s', { error: errorMsg })
     await new Promise(resolve => setTimeout(resolve, 2000))
     try {
       return await attempt()
     } catch (retryError) {
-      log.error('AI generation failed after retry', { error: (retryError as Error).message })
+      const retryMsg = retryError instanceof AnthropicApiError ? retryError.message : (retryError as Error).message
+      log.error('AI generation failed after retry', { error: retryMsg })
       return { actions: null, summary: null, highlights: null, apiKeyMissing: false }
     }
   }

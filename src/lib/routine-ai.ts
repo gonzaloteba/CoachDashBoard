@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { logger } from '@/lib/logger'
+import { ApiKeyMissingError, AnthropicApiError } from '@/lib/transcript-ai'
 import type { Client } from '@/lib/types'
 
 const log = logger('routine:ai')
@@ -119,11 +120,10 @@ function buildClientDataPrompt(client: Client): string {
   return fields.join('\n')
 }
 
-export async function generateRoutine(client: Client): Promise<string | null> {
+export async function generateRoutine(client: Client): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    log.warn('ANTHROPIC_API_KEY not configured, skipping routine generation')
-    return null
+    throw new ApiKeyMissingError()
   }
 
   try {
@@ -151,12 +151,32 @@ export async function generateRoutine(client: Client): Promise<string | null> {
       return result.text.trim()
     }
 
-    return null
+    throw new Error('La AI no generó contenido de rutina')
   } catch (error) {
+    if (error instanceof ApiKeyMissingError) throw error
+    if (error instanceof AnthropicApiError) throw error
+
+    // Translate Anthropic SDK errors to user-friendly messages
+    if (error instanceof Anthropic.APIError) {
+      const status = error.status
+      log.error('Anthropic API error generating routine', {
+        status,
+        message: error.message,
+        clientName: `${client.first_name} ${client.last_name}`,
+      })
+      if (status === 401) {
+        throw new AnthropicApiError('La API key de Anthropic es inválida o ha expirado. Revísala en Vercel → Settings → Environment Variables.', status)
+      }
+      if (status === 429) {
+        throw new AnthropicApiError('Demasiadas solicitudes a Anthropic. Espera unos minutos.', status)
+      }
+      throw new AnthropicApiError(`Error de Anthropic (${status}): ${error.message}`, status)
+    }
+
     log.error('Failed to generate routine', {
       error: (error as Error).message,
       clientName: `${client.first_name} ${client.last_name}`,
     })
-    return null
+    throw error
   }
 }

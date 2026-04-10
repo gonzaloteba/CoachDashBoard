@@ -44,6 +44,8 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
         if (result.success) {
           toast('Resumen generado automáticamente', 'success')
           router.refresh()
+        } else {
+          toast(result.error || 'Error al generar contenido AI', 'error')
         }
       }
     }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { generateTranscriptSummary, generatePositiveHighlights, generateCoachActions } from '@/lib/transcript-ai'
+import { generateTranscriptSummary, generatePositiveHighlights, generateCoachActions, AnthropicApiError } from '@/lib/transcript-ai'
 import { createAlertsFromCoachActions } from '@/lib/call-alerts'
 import { logger } from '@/lib/logger'
 
@@ -77,11 +77,24 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        const [summary, highlights, actions] = await Promise.all([
+        // Use Promise.allSettled so one failure doesn't block the others
+        const [summaryResult, highlightsResult, actionsResult] = await Promise.allSettled([
           generateTranscriptSummary(call.transcript, clientName),
           generatePositiveHighlights(call.transcript, clientName),
           generateCoachActions(call.transcript, clientName),
         ])
+
+        const summary = summaryResult.status === 'fulfilled' ? summaryResult.value : null
+        const highlights = highlightsResult.status === 'fulfilled' ? highlightsResult.value : null
+        const actions = actionsResult.status === 'fulfilled' ? actionsResult.value : null
+
+        // Log any failures with the real error message
+        for (const [name, result] of [['summary', summaryResult], ['highlights', highlightsResult], ['actions', actionsResult]] as const) {
+          if (result.status === 'rejected') {
+            const errMsg = result.reason instanceof AnthropicApiError ? result.reason.message : (result.reason as Error).message
+            log.error(`AI ${name} generation failed`, { callId: call.id, error: errMsg })
+          }
+        }
 
         const updates: Record<string, unknown> = {}
         if (summary) updates.transcript_summary = summary

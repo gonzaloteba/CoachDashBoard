@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { clientIdSchema, updateEndDateSchema, toggleBadgeSchema, callIdSchema } from '@/lib/validations'
 import { logger } from '@/lib/logger'
-import { generateCoachActions, generateTranscriptSummary, generatePositiveHighlights, ApiKeyMissingError } from '@/lib/transcript-ai'
+import { generateCoachActions, generateTranscriptSummary, generatePositiveHighlights, ApiKeyMissingError, AnthropicApiError } from '@/lib/transcript-ai'
 
 const log = logger('actions:client')
 
@@ -246,11 +246,28 @@ export async function regenerateCallAI(callId: string) {
       ? `${client.first_name} ${client.last_name || ''}`.trim()
       : undefined
 
-    const [coachActions, transcriptSummary, positiveHighlights] = await Promise.all([
+    const [actionsResult, summaryResult, highlightsResult] = await Promise.allSettled([
       generateCoachActions(call.transcript, clientName),
       generateTranscriptSummary(call.transcript, clientName),
       generatePositiveHighlights(call.transcript, clientName),
     ])
+
+    // Check for API-level errors (auth, credits, etc.) and surface them
+    const firstError = [actionsResult, summaryResult, highlightsResult].find(r => r.status === 'rejected')
+    if (firstError && firstError.status === 'rejected') {
+      const reason = firstError.reason
+      if (reason instanceof ApiKeyMissingError) {
+        return { success: false, error: 'ANTHROPIC_API_KEY no está configurada en Vercel. Ve a Vercel → Settings → Environment Variables y agrégala.' }
+      }
+      if (reason instanceof AnthropicApiError) {
+        return { success: false, error: reason.message }
+      }
+      return { success: false, error: `Error al llamar a la AI: ${(reason as Error).message}` }
+    }
+
+    const coachActions = actionsResult.status === 'fulfilled' ? actionsResult.value : null
+    const transcriptSummary = summaryResult.status === 'fulfilled' ? summaryResult.value : null
+    const positiveHighlights = highlightsResult.status === 'fulfilled' ? highlightsResult.value : null
 
     const updates: Record<string, unknown> = {}
     if (coachActions) {
@@ -282,7 +299,11 @@ export async function regenerateCallAI(callId: string) {
       log.error('ANTHROPIC_API_KEY not configured', { callId })
       return { success: false, error: 'ANTHROPIC_API_KEY no está configurada en Vercel. Ve a Vercel → Settings → Environment Variables y agrégala.' }
     }
+    if (e instanceof AnthropicApiError) {
+      log.error('Anthropic API error', { callId, error: e.message, statusCode: e.statusCode })
+      return { success: false, error: e.message }
+    }
     log.error('Unexpected error regenerating AI content', { callId, error: (e as Error).message })
-    return { success: false, error: 'Error inesperado al generar contenido' }
+    return { success: false, error: `Error al generar contenido: ${(e as Error).message}` }
   }
 }

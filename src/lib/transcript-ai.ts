@@ -11,6 +11,49 @@ export class ApiKeyMissingError extends Error {
   }
 }
 
+/** Error thrown when the Anthropic API call fails (auth, credits, rate limit, etc.) */
+export class AnthropicApiError extends Error {
+  public statusCode?: number
+  constructor(message: string, statusCode?: number) {
+    super(message)
+    this.name = 'AnthropicApiError'
+    this.statusCode = statusCode
+  }
+}
+
+/**
+ * Translates Anthropic SDK errors into user-friendly Spanish messages.
+ */
+function translateAnthropicError(error: unknown): AnthropicApiError {
+  if (error instanceof Anthropic.APIError) {
+    const status = error.status
+    if (status === 401) {
+      return new AnthropicApiError('La API key de Anthropic es inválida o ha expirado. Revísala en Vercel → Settings → Environment Variables.', status)
+    }
+    if (status === 403) {
+      return new AnthropicApiError('La API key de Anthropic no tiene permisos suficientes.', status)
+    }
+    if (status === 429) {
+      return new AnthropicApiError('Demasiadas solicitudes a la API de Anthropic. Espera unos minutos e intenta de nuevo.', status)
+    }
+    if (status === 400) {
+      const msg = error.message || ''
+      if (msg.includes('credit') || msg.includes('billing')) {
+        return new AnthropicApiError('Sin créditos en Anthropic. Recarga en console.anthropic.com/settings/billing.', status)
+      }
+      return new AnthropicApiError(`Error de la API de Anthropic: ${msg}`, status)
+    }
+    if (status === 529 || status === 500) {
+      return new AnthropicApiError('La API de Anthropic está temporalmente sobrecargada. Reintenta en unos minutos.', status)
+    }
+    // Generic API error with real message
+    return new AnthropicApiError(`Error de Anthropic (${status}): ${error.message}`, status)
+  }
+  // Unknown error
+  const message = error instanceof Error ? error.message : String(error)
+  return new AnthropicApiError(`Error inesperado al llamar a Anthropic: ${message}`)
+}
+
 function getAnthropicClient(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
@@ -76,7 +119,7 @@ ${transcript.substring(0, 15000)}`,
       error: (error as Error).message,
       clientName,
     })
-    return null
+    throw translateAnthropicError(error)
   }
 }
 
@@ -137,7 +180,7 @@ ${transcript.substring(0, 15000)}`,
       error: (error as Error).message,
       clientName,
     })
-    return null
+    throw translateAnthropicError(error)
   }
 }
 
@@ -196,6 +239,6 @@ ${transcript.substring(0, 15000)}`,
       error: (error as Error).message,
       clientName,
     })
-    return null
+    throw translateAnthropicError(error)
   }
 }
