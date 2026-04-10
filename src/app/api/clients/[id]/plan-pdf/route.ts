@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { generateRoutine } from '@/lib/routine-ai'
 import { generatePlanPdf } from '@/lib/pdf-generator'
+import { toTitleCase } from '@/lib/utils'
+import { ApiKeyMissingError, AnthropicApiError } from '@/lib/transcript-ai'
 import type { Client } from '@/lib/types'
+
+export const maxDuration = 60
 
 export async function POST(
   _request: NextRequest,
@@ -41,19 +45,13 @@ export async function POST(
 
     // Generate routine with Claude
     const routine = await generateRoutine(typedClient)
-    if (!routine) {
-      return NextResponse.json(
-        { error: 'No se pudo generar la rutina. Verifica que ANTHROPIC_API_KEY esté configurada.' },
-        { status: 500 }
-      )
-    }
 
     // Generate PDF with routine embedded in page 3
-    const clientName = `${typedClient.first_name} ${typedClient.last_name}`
+    const clientName = `${toTitleCase(typedClient.first_name)} ${toTitleCase(typedClient.last_name)}`
     const pdfBytes = await generatePlanPdf(clientName, routine)
 
     // Return PDF as downloadable file
-    const fileName = `Plan Alimentacion - ${typedClient.first_name} ${typedClient.last_name}.pdf`
+    const fileName = `Plan Alimentacion - ${toTitleCase(typedClient.first_name)} ${toTitleCase(typedClient.last_name)}.pdf`
     return new NextResponse(Buffer.from(pdfBytes), {
       headers: {
         'Content-Type': 'application/pdf',
@@ -61,8 +59,20 @@ export async function POST(
       },
     })
   } catch (error) {
+    if (error instanceof ApiKeyMissingError) {
+      return NextResponse.json(
+        { error: 'ANTHROPIC_API_KEY no está configurada en Vercel. Ve a Vercel → Settings → Environment Variables y agrégala.' },
+        { status: 500 }
+      )
+    }
+    if (error instanceof AnthropicApiError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.statusCode || 500 }
+      )
+    }
     const message = error instanceof Error ? error.message : 'Error desconocido'
-    console.error('Plan PDF generation error:', message, error)
+    console.error('Plan PDF generation error:', message)
     return NextResponse.json(
       { error: `Error al generar el PDF: ${message}` },
       { status: 500 }

@@ -56,7 +56,7 @@ export default async function ClientsPage({ searchParams }: Props) {
 
   const clientsQuery = supabase.from('clients').select('*').order('start_date', { ascending: false })
   if (filterCoachId) {
-    clientsQuery.eq('coach_id', filterCoachId)
+    clientsQuery.or(`coach_id.eq.${filterCoachId},coach_id.is.null`)
   }
 
   const safe = <T,>(promise: PromiseLike<{ data: T | null; error: unknown }>): Promise<{ data: T | null }> =>
@@ -151,6 +151,7 @@ export default async function ClientsPage({ searchParams }: Props) {
       calls_this_month: callsCount,
       days_remaining: getDaysRemaining(client.end_date),
       pending_coach_actions: pendingActions,
+      unresolved_alerts: alertCount,
       is_birthday_today: isBirthdayToday,
       has_pending_phase_change: hasPendingPhaseChange,
     }

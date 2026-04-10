@@ -7,13 +7,16 @@ import { createClient } from '@/lib/supabase/client'
 import { ALERT_TYPE_LABELS, SEVERITY_COLORS, SEVERITY_LABELS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
+import { CreateAlertDialog } from '@/components/alerts/create-alert-dialog'
 import type { Alert } from '@/lib/types'
 
 interface PendingAlertsProps {
   alerts: Alert[]
+  clientId: string
+  clientName: string
 }
 
-export function PendingAlerts({ alerts: initialAlerts }: PendingAlertsProps) {
+export function PendingAlerts({ alerts: initialAlerts, clientId, clientName }: PendingAlertsProps) {
   const [alerts, setAlerts] = useState(initialAlerts)
   const [resolvingId, setResolvingId] = useState<string | null>(null)
   const router = useRouter()
@@ -39,15 +42,22 @@ export function PendingAlerts({ alerts: initialAlerts }: PendingAlertsProps) {
   }
 
   if (alerts.length === 0) {
-    return null
+    return (
+      <div className="flex justify-end">
+        <CreateAlertDialog clientId={clientId} clientName={clientName} />
+      </div>
+    )
   }
 
   return (
     <div className="rounded-xl border border-red-200 bg-red-50/50 p-6 shadow-sm">
-      <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-red-800">
-        <AlertTriangle className="h-4 w-4" />
-        Pendiente de resolver ({alerts.length})
-      </h3>
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="flex items-center gap-2 text-sm font-medium text-red-800">
+          <AlertTriangle className="h-4 w-4" />
+          Pendiente de resolver ({alerts.length})
+        </h3>
+        <CreateAlertDialog clientId={clientId} clientName={clientName} />
+      </div>
       <div className="space-y-2">
         {alerts.map((alert) => (
           <div

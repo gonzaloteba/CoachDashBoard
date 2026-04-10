@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { createClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/header'
 import { PhaseTracker } from '@/components/clients/phase-tracker'
@@ -7,6 +9,7 @@ import { PendingAlerts } from '@/components/clients/pending-alerts'
 import { PendingCoachActions } from '@/components/clients/pending-coach-actions'
 import { getCurrentCoach, isAdmin } from '@/lib/auth'
 import { notFound } from 'next/navigation'
+import { toTitleCase } from '@/lib/utils'
 import type { NutritionPhase } from '@/lib/types'
 
 interface Props {
@@ -65,11 +68,15 @@ export default async function ClientDetailPage({ params }: Props) {
 
   return (
     <div>
-      <Header title={`${client.first_name} ${client.last_name}`} />
+      <Header title={`${toTitleCase(client.first_name)} ${toTitleCase(client.last_name)}`} />
       <div className="p-6 space-y-6">
         <ClientDetailHeader client={client} alertCount={alerts?.length || 0} />
 
-        <PendingAlerts alerts={alerts || []} />
+        <PendingAlerts
+          alerts={alerts || []}
+          clientId={client.id}
+          clientName={`${toTitleCase(client.first_name)} ${toTitleCase(client.last_name)}`}
+        />
 
         <PendingCoachActions calls={calls || []} />
 

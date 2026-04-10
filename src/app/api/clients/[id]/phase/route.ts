@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { PHASE_DURATIONS_DAYS } from '@/lib/constants'
@@ -27,14 +28,24 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     // Verify authenticated user owns this client (or is admin)
     const userSupabase = await createClient()
-    const { data: { user } } = await userSupabase.auth.getUser()
-    if (!user) {
+    const { data: { user }, error: authError } = await userSupabase.auth.getUser()
+    if (authError || !user) {
+      log.error('Auth failed', { error: authError?.message ?? 'No user', clientId: id })
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const { data: coach } = await userSupabase.from('coaches').select('role').eq('id', user.id).single()
+    // Use admin client for role check to avoid RLS restrictions on coaches table
+    const adminSupa = getAdminClient()
+    const { data: coach, error: coachError } = await adminSupa.from('coaches').select('role').eq('id', user.id).single()
+    if (coachError) {
+      log.error('Coach lookup failed', { error: coachError.message, userId: user.id })
+    }
     if (coach?.role !== 'admin') {
-      const { data: client } = await userSupabase.from('clients').select('coach_id').eq('id', id).single()
+      const { data: client, error: clientError } = await adminSupa.from('clients').select('coach_id').eq('id', id).single()
+      if (clientError) {
+        log.error('Client lookup failed', { error: clientError.message, clientId: id })
+      }
       if (!client || client.coach_id !== user.id) {
+        log.error('Forbidden: coach_id mismatch', { clientCoachId: client?.coach_id, userId: user.id, clientId: id })
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
     }
@@ -67,17 +78,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       const isIndefinite = custom_phase_duration_days === INDEFINITE || (phase === 3 && custom_phase_duration_days === undefined)
 
       if (isIndefinite) {
-        // Indefinite: no phase_change_date, store -1 as sentinel
+        // Indefinite: no phase_change_date
         const { error } = await supabase
           .from('clients')
           .update({
             current_phase: phase,
-            custom_phase_duration_days: INDEFINITE,
             phase_change_date: null,
           })
           .eq('id', id)
 
         if (error) {
+          log.error('DB update failed (indefinite)', { error: error.message, code: error.code, clientId: id, phase })
           return NextResponse.json({ error: error.message }, { status: 500 })
         }
       } else {
@@ -87,28 +98,19 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         changeDate.setDate(changeDate.getDate() + duration)
         const phaseChangeDate = changeDate.toISOString().split('T')[0]
 
+        log.info('Updating phase', { clientId: id, phase, duration, phaseChangeDate, custom_phase_duration_days: custom_phase_duration_days ?? null })
+
         const { error } = await supabase
           .from('clients')
           .update({
             current_phase: phase,
-            custom_phase_duration_days: custom_phase_duration_days ?? null,
+            phase_change_date: phaseChangeDate,
           })
           .eq('id', id)
 
         if (error) {
+          log.error('DB update failed', { error: error.message, code: error.code, clientId: id, phase, duration })
           return NextResponse.json({ error: error.message }, { status: 500 })
-        }
-
-        // Explicitly set phase_change_date (trigger may have set a different value for null custom)
-        if (custom_phase_duration_days && custom_phase_duration_days > 0) {
-          const { error: dateError } = await supabase
-            .from('clients')
-            .update({ phase_change_date: phaseChangeDate })
-            .eq('id', id)
-
-          if (dateError) {
-            log.error('Failed to set phase_change_date', { error: dateError.message, clientId: id })
-          }
         }
       }
 
@@ -124,6 +126,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         log.error('Failed to resolve phase_change alerts', { error: alertError.message, clientId: id })
       }
 
+      revalidatePath(`/dashboard/clients/${id}`)
       return NextResponse.json({ success: true })
     }
 
@@ -135,7 +138,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         const { error } = await supabase
           .from('clients')
           .update({
-            custom_phase_duration_days: INDEFINITE,
             phase_change_date: null,
           })
           .eq('id', id)
@@ -163,7 +165,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         const { error } = await supabase
           .from('clients')
           .update({
-            custom_phase_duration_days: custom_phase_duration_days ?? null,
             phase_change_date: phaseChangeDate,
           })
           .eq('id', id)
@@ -185,6 +186,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         log.error('Failed to resolve phase_change alerts', { error: alertError.message, clientId: id })
       }
 
+      revalidatePath(`/dashboard/clients/${id}`)
       return NextResponse.json({ success: true })
     }
 

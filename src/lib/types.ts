@@ -1,4 +1,4 @@
-export type ClientStatus = 'active' | 'cancelled' | 'completed'
+export type ClientStatus = 'active' | 'paused' | 'cancelled' | 'completed'
 export type NutritionPhase = 1 | 2 | 3
 export type AlertType =
   | 'missed_checkin'
@@ -9,6 +9,7 @@ export type AlertType =
   | 'program_ending'
   | 'birthday'
   | 'upcoming_call'
+  | 'manual'
 export type AlertSeverity = 'low' | 'medium' | 'high'
 export type UserRole = 'coach' | 'admin'
 export type HealthScore = 'green' | 'red'
@@ -129,6 +130,7 @@ export interface Call {
   duration_minutes: number
   notes: string | null
   transcript: string | null
+  transcript_summary: string | null
   google_event_id: string | null
   meet_link: string | null
   calendly_event_uri: string | null
@@ -136,6 +138,7 @@ export interface Call {
   coach_actions: string | null
   coach_actions_completed: boolean
   coach_actions_completed_items: number[]
+  positive_highlights: string | null
   created_at: string
 }
 
@@ -176,6 +179,7 @@ export interface ClientWithHealth extends Client {
   calls_this_month: number
   days_remaining: number
   pending_coach_actions: number
+  unresolved_alerts: number
   is_birthday_today: boolean
   has_pending_phase_change: boolean
 }

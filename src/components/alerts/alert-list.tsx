@@ -2,19 +2,21 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, CheckCircle, Cake, Phone } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { AlertTriangle, CheckCircle, Cake, Phone, StickyNote } from 'lucide-react'
+import { cn, toTitleCase } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { ALERT_TYPE_LABELS, SEVERITY_COLORS, SEVERITY_LABELS } from '@/lib/constants'
 import { useToast } from '@/components/ui/toast'
+import { CreateAlertDialog } from '@/components/alerts/create-alert-dialog'
 import type { Alert } from '@/lib/types'
 
 interface AlertListProps {
   alerts: (Alert & { client?: { first_name: string; last_name: string } })[]
+  clients?: { id: string; first_name: string; last_name: string }[]
 }
 
-export function AlertList({ alerts }: AlertListProps) {
+export function AlertList({ alerts, clients }: AlertListProps) {
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [severityFilter, setSeverityFilter] = useState<string>('all')
   const [showResolved, setShowResolved] = useState(false)
@@ -74,6 +76,9 @@ export function AlertList({ alerts }: AlertListProps) {
           />
           Mostrar resueltas
         </label>
+        <div className="ml-auto">
+          <CreateAlertDialog clientId="" clients={clients} />
+        </div>
       </div>
 
       {/* Alert list */}
@@ -96,6 +101,8 @@ export function AlertList({ alerts }: AlertListProps) {
                   <Cake className="mt-0.5 h-5 w-5 shrink-0 text-pink-500" />
                 ) : alert.type === 'upcoming_call' ? (
                   <Phone className="mt-0.5 h-5 w-5 shrink-0 text-blue-500" />
+                ) : alert.type === 'manual' ? (
+                  <StickyNote className="mt-0.5 h-5 w-5 shrink-0 text-purple-500" />
                 ) : (
                   <AlertTriangle
                     className={cn(
@@ -114,7 +121,7 @@ export function AlertList({ alerts }: AlertListProps) {
                       href={`/dashboard/clients/${alert.client_id}`}
                       className="font-medium hover:underline"
                     >
-                      {alert.client?.first_name} {alert.client?.last_name}
+                      {alert.client?.first_name ? toTitleCase(alert.client.first_name) : ''} {alert.client?.last_name ? toTitleCase(alert.client.last_name) : ''}
                     </Link>
                     <span
                       className={cn(

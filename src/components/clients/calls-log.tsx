@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
-import { Phone, Plus, ChevronDown, ChevronUp, FileText, Video, ExternalLink, ClipboardList, CheckCircle2, Loader2 } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Phone, Plus, ChevronDown, ChevronUp, FileText, Video, ExternalLink, ClipboardList, CheckCircle2, Loader2, Sparkles, Clock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { cn, inputClass, textareaClass } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
-import { completeCoachActions as completeCoachActionsAction } from '@/app/dashboard/clients/[id]/actions'
+import { completeCoachActions as completeCoachActionsAction, regenerateCallAI } from '@/app/dashboard/clients/[id]/actions'
 import type { Call } from '@/lib/types'
 
 interface CallsLogProps {
@@ -19,8 +19,39 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
   const [loading, setLoading] = useState(false)
   const [expandedCall, setExpandedCall] = useState<string | null>(null)
   const [completingAction, setCompletingAction] = useState<string | null>(null)
+  const [regeneratingAI, setRegeneratingAI] = useState<string | null>(null)
+  const autoRegenTriggered = useRef<Set<string>>(new Set())
   const router = useRouter()
   const { toast } = useToast()
+
+  // Auto-regenerate AI for calls with transcript but missing summary/highlights/actions
+  useEffect(() => {
+    const callsMissingAI = calls.filter(
+      (call) =>
+        call.transcript &&
+        (!call.transcript_summary || !call.positive_highlights || !call.coach_actions) &&
+        !autoRegenTriggered.current.has(call.id)
+    )
+
+    if (callsMissingAI.length === 0) return
+
+    async function autoRegenerate() {
+      for (const call of callsMissingAI) {
+        autoRegenTriggered.current.add(call.id)
+        setRegeneratingAI(call.id)
+        const result = await regenerateCallAI(call.id)
+        setRegeneratingAI(null)
+        if (result.success) {
+          toast('Resumen generado automáticamente', 'success')
+          router.refresh()
+        } else {
+          toast(result.error || 'Error al generar contenido AI', 'error')
+        }
+      }
+    }
+
+    autoRegenerate()
+  }, [calls, router, toast])
 
   async function handleAddCall(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -61,6 +92,18 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
     await completeCoachActionsAction(callId)
     setCompletingAction(null)
     router.refresh()
+  }
+
+  async function handleRegenerateAI(callId: string) {
+    setRegeneratingAI(callId)
+    const result = await regenerateCallAI(callId)
+    setRegeneratingAI(null)
+    if (result.success) {
+      toast('Resumen y acciones generados correctamente', 'success')
+      router.refresh()
+    } else {
+      toast(result.error || 'Error al generar contenido', 'error')
+    }
   }
 
   return (
@@ -169,8 +212,10 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
         ) : (
           calls.map((call) => {
             const isExpanded = expandedCall === call.id
+            const hasSummary = !!call.transcript_summary
             const hasTranscript = !!call.transcript
             const hasCoachActions = !!call.coach_actions
+            const hasPositiveHighlights = !!call.positive_highlights
             const actionsPending = hasCoachActions && !call.coach_actions_completed
 
             return (
@@ -182,7 +227,7 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
                 >
                   <Phone className="mt-0.5 h-4 w-4 text-muted-foreground shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-medium">
                         {new Date(call.call_date).toLocaleDateString('es-ES', {
                           weekday: 'short',
@@ -193,10 +238,29 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
                       <span className="text-xs text-muted-foreground">
                         {call.duration_minutes} min
                       </span>
-                      {hasTranscript && (
+                      {hasSummary && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">
                           <FileText className="h-3 w-3" />
-                          Transcript
+                          Resumen
+                        </span>
+                      )}
+                      {!hasSummary && hasTranscript && (
+                        regeneratingAI === call.id ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Generando IA...
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                            <Clock className="h-3 w-3" />
+                            Pendiente IA
+                          </span>
+                        )
+                      )}
+                      {hasPositiveHighlights && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700">
+                          <Sparkles className="h-3 w-3" />
+                          Positivo
                         </span>
                       )}
                       {call.meet_link && (
@@ -217,11 +281,14 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
                         </span>
                       )}
                     </div>
-                    {call.notes && (
+                    {hasSummary && (
+                      <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{call.transcript_summary}</p>
+                    )}
+                    {!hasSummary && call.notes && (
                       <p className="mt-1 text-xs text-muted-foreground line-clamp-1">{call.notes}</p>
                     )}
                   </div>
-                  {(hasTranscript || call.notes || hasCoachActions) && (
+                  {(hasSummary || hasTranscript || call.notes || hasCoachActions || hasPositiveHighlights) && (
                     isExpanded
                       ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
                       : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
@@ -249,14 +316,52 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
                         <p className="text-sm whitespace-pre-wrap">{call.notes}</p>
                       </div>
                     )}
-                    {hasTranscript && (
+                    {hasTranscript && (!hasSummary || !hasPositiveHighlights || !hasCoachActions) && (
+                      <div className={cn(!call.meet_link && !call.notes && 'pt-3')}>
+                        {regeneratingAI === call.id ? (
+                          <div className="flex items-center gap-2 rounded-lg bg-blue-50 border border-blue-200 p-3">
+                            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                            <span className="text-sm text-blue-700 font-medium">
+                              Generando resumen y acciones con IA...
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => handleRegenerateAI(call.id)}
+                              className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-700 transition-colors"
+                            >
+                              <Sparkles className="h-3.5 w-3.5" />
+                              Generar resumen y acciones
+                            </button>
+                            <span className="text-[10px] text-muted-foreground">
+                              Transcript disponible
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {hasSummary && (
                       <div>
                         <p className="text-xs font-medium text-muted-foreground mb-1">
-                          Transcript de Gemini
+                          Resumen de la llamada
                         </p>
-                        <div className="max-h-80 overflow-y-auto rounded-lg bg-muted/50 p-3">
-                          <p className="text-xs whitespace-pre-wrap font-mono leading-relaxed">
-                            {call.transcript}
+                        <div className="rounded-lg bg-blue-50/50 border border-blue-100 p-3">
+                          <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                            {call.transcript_summary}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {hasPositiveHighlights && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1.5">
+                          <Sparkles className="h-3.5 w-3.5 text-purple-600" />
+                          Cosas positivas para seguimiento WhatsApp
+                        </p>
+                        <div className="rounded-lg bg-purple-50/50 border border-purple-100 p-3">
+                          <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                            {call.positive_highlights}
                           </p>
                         </div>
                       </div>

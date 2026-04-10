@@ -12,16 +12,18 @@ export const PHASE_DURATIONS_DAYS: Record<NutritionPhase, number> = {
   3: 53, // remaining of 90 days
 }
 
-export const PHASE_ALERT_DAYS_BEFORE = 3
+export const PHASE_ALERT_DAYS_BEFORE = 1
 
 export const STATUS_LABELS: Record<ClientStatus, string> = {
   active: 'Activo',
+  paused: 'Pausado',
   completed: 'Concluido',
   cancelled: 'Cancelado',
 }
 
 export const STATUS_COLORS: Record<ClientStatus, string> = {
   active: 'bg-green-100 text-green-800',
+  paused: 'bg-yellow-100 text-yellow-800',
   completed: 'bg-blue-100 text-blue-800',
   cancelled: 'bg-red-100 text-red-800',
 }
@@ -40,6 +42,7 @@ export const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   program_ending: 'Programa por terminar',
   birthday: 'Cumpleaños',
   upcoming_call: 'Llamada programada',
+  manual: 'Manual',
 }
 
 export const SEVERITY_COLORS: Record<AlertSeverity, string> = {

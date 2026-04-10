@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { logger } from '@/lib/logger'
+import { ApiKeyMissingError, AnthropicApiError } from '@/lib/transcript-ai'
 import type { Client } from '@/lib/types'
 
 const log = logger('routine:ai')
@@ -18,8 +19,9 @@ FILOSOFÍA BASE (NO NEGOCIABLE):
 - El ayuno intermitente se implementa de forma natural, no forzada. La saciedad de la alimentación lo produce por sí sola.
 - El objetivo es que el cliente haga SOLO 2 comidas al día: desayuno (comida 1) y cena (comida 2). Eso es lo ideal.
 - El snack es opcional y NO obligatorio. No se promueve ni se recomienda activamente. Solo se menciona como red de seguridad: si el cliente siente necesidad de comer algo entre las dos comidas principales, que lo limite a las opciones del snack que aparecen en su plan de alimentación. La idea es que no lo necesiten, pero que sepan que existe esa opción controlada.
+- Sugiéreles buena hidratación nada más despertar con agua, sal de mar y limón, así evitan el hambre en la mañana y aseguran buena energía.
 - Las comidas se nombran así: desayuno (comida 1), cena (comida 2), snack (opcional).
-- No se recomienda comer antes de entrenar para recargar glucógeno — los depósitos no se gastan hasta que se gastan.
+- No se recomienda comer antes de entrenar para recargar glucógeno — los depósitos no se gastan hasta que se gastan. Atender reglas de ENTRENAMIENTO para entender casos concretos.
 - No se incluye café en la Fase 1.
 
 REGLA CRÍTICA SOBRE CONTENIDO DE ALIMENTACIÓN:
@@ -32,22 +34,30 @@ REGLA CRÍTICA SOBRE CONTENIDO DE ALIMENTACIÓN:
 ENTRENAMIENTO Y ALIMENTACIÓN:
 - Escenario ideal: Entrenamiento en ayunas por la mañana.
 - Si el cliente entrena antes de las 13h, se le insta a aguantar el ayuno y romperlo después de entrenar.
-- Si el cliente entrena después de las 13h, se rompe el ayuno antes y se adelanta la cena para mantener la ventana de ayuno.
+- Si el cliente entrena después de las 13h, se rompe el ayuno ANTES de entrenar y se adelanta la cena para mantener la ventana de ayuno. NUNCA se le pide al cliente mantener el ayuno hasta después de un entrenamiento vespertino/nocturno (después de las 13h), ya que eso generaría un OMAD involuntario o una ventana de alimentación demasiado corta.
+- VALIDACIÓN OBLIGATORIA: tras calcular los horarios de cada día, verifica que la ventana de alimentación resultante (hora de última comida - hora de primera comida) sea de al menos 1.5 horas. Si la ventana es menor de 1.5h o si la hora de primera comida es posterior a la hora de última comida, hay un error lógico que debes corregir.
 - Las indicaciones de entrenamiento (volumen, ejercicios, series) no son responsabilidad de este sistema — eso lo gestiona el coach. Solo se menciona el entrenamiento si tiene implicación directa sobre la alimentación o el ayuno.
 
 SUEÑO Y DESCANSO:
 - Mínimo 3 horas entre la última ingesta y acostarse (favorece fases profundas del sueño).
 - Reducir estímulos de luz y pantallas al menos 1 hora antes de dormir.
 
+REGLA CRÍTICA DE VENTANA DE AYUNO:
+- La ventana de ayuno mínima objetivo es de 14 a 16 horas. Este es un requisito no negociable.
+- Los horarios que el cliente reporta en la auditoría inicial son una REFERENCIA, no una restricción. Tu trabajo es OPTIMIZAR su rutina, no simplemente validar lo que ya hace.
+- Si los horarios actuales del cliente no alcanzan al menos 14 horas de ayuno, DEBES ajustar la hora de la cena (adelantándola) y/o la hora del desayuno (retrasándola) para garantizar ese mínimo.
+- Prioriza adelantar la cena antes que retrasar el desayuno, ya que permite más horas libres antes de dormir.
+- Siempre respeta la regla de mínimo 3 horas entre la última ingesta y la hora de acostarse.
+
 LÓGICA DE ANÁLISIS:
 1. Calcula la ventana de ayuno real del cliente: hora de última comida > hora de primera comida del día siguiente.
-2. Evalúa si los horarios ya son correctos. Si funcionan, reafírmalos — no los cambies.
-3. Identifica solo lo que necesita corrección y trabaja únicamente sobre eso.
+2. Compara esa ventana con el mínimo de 14 horas. Si no lo alcanza, ajusta los horarios hasta conseguirlo.
+3. Verifica que los horarios ajustados sigan respetando la regla de 3 horas sin comer antes de dormir.
 4. No inventes ni asumas datos que no están proporcionados.
 5. Sé directo, técnico y sin relleno. Sin motivación vacía. Sin explicaciones innecesarias.
 6. NUNCA menciones alimentos específicos, macronutrientes ni composición de comidas. Solo horarios y estructura temporal.
-6. Al final, añade 2 líneas máximo explicando qué se busca potenciar con esa estructura.
-7. Al referirte a la última comida del día, usa siempre "cenar a las Xh" en lugar de construcciones como "la comida a las Xh es ideal".
+7. Al final, añade 2 líneas máximo explicando qué se busca potenciar con esa estructura.
+8. Al referirte a la última comida del día, usa siempre "cenar a las Xh" en lugar de construcciones como "la comida a las Xh es ideal".
 
 FORMATO DE RESPUESTA:
 Responde SOLO con el contenido estructurado, sin markdown, sin encabezados extra. Usa este formato exacto:
@@ -110,11 +120,10 @@ function buildClientDataPrompt(client: Client): string {
   return fields.join('\n')
 }
 
-export async function generateRoutine(client: Client): Promise<string | null> {
+export async function generateRoutine(client: Client): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    log.warn('ANTHROPIC_API_KEY not configured, skipping routine generation')
-    return null
+    throw new ApiKeyMissingError()
   }
 
   try {
@@ -142,12 +151,32 @@ export async function generateRoutine(client: Client): Promise<string | null> {
       return result.text.trim()
     }
 
-    return null
+    throw new Error('La AI no generó contenido de rutina')
   } catch (error) {
+    if (error instanceof ApiKeyMissingError) throw error
+    if (error instanceof AnthropicApiError) throw error
+
+    // Translate Anthropic SDK errors to user-friendly messages
+    if (error instanceof Anthropic.APIError) {
+      const status = error.status
+      log.error('Anthropic API error generating routine', {
+        status,
+        message: error.message,
+        clientName: `${client.first_name} ${client.last_name}`,
+      })
+      if (status === 401) {
+        throw new AnthropicApiError('La API key de Anthropic es inválida o ha expirado. Revísala en Vercel → Settings → Environment Variables.', status)
+      }
+      if (status === 429) {
+        throw new AnthropicApiError('Demasiadas solicitudes a Anthropic. Espera unos minutos.', status)
+      }
+      throw new AnthropicApiError(`Error de Anthropic (${status}): ${error.message}`, status)
+    }
+
     log.error('Failed to generate routine', {
       error: (error as Error).message,
       clientName: `${client.first_name} ${client.last_name}`,
     })
-    return null
+    throw error
   }
 }

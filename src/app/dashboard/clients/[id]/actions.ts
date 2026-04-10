@@ -3,8 +3,9 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { updateEndDateSchema, toggleBadgeSchema, callIdSchema } from '@/lib/validations'
+import { clientIdSchema, updateEndDateSchema, toggleBadgeSchema, callIdSchema } from '@/lib/validations'
 import { logger } from '@/lib/logger'
+import { generateCoachActions, generateTranscriptSummary, generatePositiveHighlights, ApiKeyMissingError, AnthropicApiError } from '@/lib/transcript-ai'
 
 const log = logger('actions:client')
 
@@ -143,6 +144,33 @@ export async function completeCoachActions(callId: string) {
   }
 }
 
+export async function deleteClient(clientId: string) {
+  const parsed = clientIdSchema.safeParse(clientId)
+  if (!parsed.success) {
+    return { success: false, error: 'ID de cliente inválido' }
+  }
+
+  const auth = await authorizeForClient(parsed.data)
+  if (!auth.authorized) return { success: false, error: auth.error }
+
+  try {
+    const supabase = getAdminClient()
+
+    // ON DELETE CASCADE handles related records (alerts, check_ins, calls, training_plans)
+    const { error } = await supabase.from('clients').delete().eq('id', parsed.data)
+    if (error) {
+      log.error('Failed to delete client', { clientId, error: error.message })
+      return { success: false, error: 'Error al eliminar el cliente' }
+    }
+
+    revalidateDashboard()
+    return { success: true }
+  } catch (e) {
+    log.error('Unexpected error deleting client', { clientId, error: (e as Error).message })
+    return { success: false, error: 'Error inesperado' }
+  }
+}
+
 export async function toggleCoachActionItem(callId: string, itemIndex: number, completed: boolean) {
   const parsed = callIdSchema.safeParse(callId)
   if (!parsed.success) {
@@ -152,7 +180,7 @@ export async function toggleCoachActionItem(callId: string, itemIndex: number, c
   const adminSupabase = getAdminClient()
   const { data: call } = await adminSupabase
     .from('calls')
-    .select('client_id, coach_actions, coach_actions_completed_items')
+    .select('client_id')
     .eq('id', parsed.data)
     .single()
 
@@ -162,38 +190,120 @@ export async function toggleCoachActionItem(callId: string, itemIndex: number, c
   if (!auth.authorized) return { success: false, error: auth.error }
 
   try {
-    const currentItems: number[] = (call.coach_actions_completed_items as number[]) || []
-    let newItems: number[]
-
-    if (completed) {
-      newItems = currentItems.includes(itemIndex) ? currentItems : [...currentItems, itemIndex]
-    } else {
-      newItems = currentItems.filter((i) => i !== itemIndex)
-    }
-
-    // Count total action items to check if all are now completed
-    const totalActions = (call.coach_actions || '')
-      .split('\n')
-      .filter((line: string) => line.trim().length > 0).length
-    const allCompleted = totalActions > 0 && newItems.length >= totalActions
-
-    const { error } = await adminSupabase
-      .from('calls')
-      .update({
-        coach_actions_completed_items: newItems,
-        coach_actions_completed: allCompleted,
-      })
-      .eq('id', parsed.data)
+    // Use atomic RPC to prevent race conditions between concurrent toggles
+    const { data, error } = await adminSupabase.rpc('toggle_coach_action_item', {
+      p_call_id: parsed.data,
+      p_item_index: itemIndex,
+      p_completed: completed,
+    })
 
     if (error) {
       log.error('Failed to toggle coach action item', { callId, itemIndex, error: error.message })
-      return { success: false, error: error.message }
+      return { success: false, error: 'Error al actualizar la acción' }
+    }
+
+    const result = data as { allCompleted?: boolean; error?: string } | null
+    if (result?.error) {
+      return { success: false, error: result.error }
     }
 
     revalidateDashboard()
-    return { success: true, allCompleted }
+    return { success: true, allCompleted: result?.allCompleted ?? false }
   } catch (e) {
     log.error('Unexpected error toggling action item', { callId, error: (e as Error).message })
     return { success: false, error: 'Error inesperado' }
+  }
+}
+
+export async function regenerateCallAI(callId: string) {
+  const parsed = callIdSchema.safeParse(callId)
+  if (!parsed.success) {
+    return { success: false, error: 'Invalid call ID' }
+  }
+
+  const adminSupabase = getAdminClient()
+  const { data: call } = await adminSupabase
+    .from('calls')
+    .select('client_id, transcript')
+    .eq('id', parsed.data)
+    .single()
+
+  if (!call) return { success: false, error: 'Llamada no encontrada' }
+  if (!call.transcript) return { success: false, error: 'No hay transcript para analizar' }
+
+  const auth = await authorizeForClient(call.client_id)
+  if (!auth.authorized) return { success: false, error: auth.error }
+
+  try {
+    // Get client name for context
+    const { data: client } = await adminSupabase
+      .from('clients')
+      .select('first_name, last_name')
+      .eq('id', call.client_id)
+      .single()
+
+    const clientName = client
+      ? `${client.first_name} ${client.last_name || ''}`.trim()
+      : undefined
+
+    const [actionsResult, summaryResult, highlightsResult] = await Promise.allSettled([
+      generateCoachActions(call.transcript, clientName),
+      generateTranscriptSummary(call.transcript, clientName),
+      generatePositiveHighlights(call.transcript, clientName),
+    ])
+
+    // Check for API-level errors (auth, credits, etc.) and surface them
+    const firstError = [actionsResult, summaryResult, highlightsResult].find(r => r.status === 'rejected')
+    if (firstError && firstError.status === 'rejected') {
+      const reason = firstError.reason
+      if (reason instanceof ApiKeyMissingError) {
+        return { success: false, error: 'ANTHROPIC_API_KEY no está configurada en Vercel. Ve a Vercel → Settings → Environment Variables y agrégala.' }
+      }
+      if (reason instanceof AnthropicApiError) {
+        return { success: false, error: reason.message }
+      }
+      return { success: false, error: `Error al llamar a la AI: ${(reason as Error).message}` }
+    }
+
+    const coachActions = actionsResult.status === 'fulfilled' ? actionsResult.value : null
+    const transcriptSummary = summaryResult.status === 'fulfilled' ? summaryResult.value : null
+    const positiveHighlights = highlightsResult.status === 'fulfilled' ? highlightsResult.value : null
+
+    const updates: Record<string, unknown> = {}
+    if (coachActions) {
+      updates.coach_actions = coachActions
+      updates.coach_actions_completed = false
+      updates.coach_actions_completed_items = []
+    }
+    if (transcriptSummary) updates.transcript_summary = transcriptSummary
+    if (positiveHighlights) updates.positive_highlights = positiveHighlights
+
+    if (Object.keys(updates).length === 0) {
+      return { success: false, error: 'La AI no generó contenido. Puede ser un error temporal — reintenta en unos minutos.' }
+    }
+
+    const { error } = await adminSupabase
+      .from('calls')
+      .update(updates)
+      .eq('id', parsed.data)
+
+    if (error) {
+      log.error('Failed to save regenerated AI content', { callId, error: error.message })
+      return { success: false, error: 'Error al guardar el contenido generado' }
+    }
+
+    revalidateDashboard()
+    return { success: true }
+  } catch (e) {
+    if (e instanceof ApiKeyMissingError) {
+      log.error('ANTHROPIC_API_KEY not configured', { callId })
+      return { success: false, error: 'ANTHROPIC_API_KEY no está configurada en Vercel. Ve a Vercel → Settings → Environment Variables y agrégala.' }
+    }
+    if (e instanceof AnthropicApiError) {
+      log.error('Anthropic API error', { callId, error: e.message, statusCode: e.statusCode })
+      return { success: false, error: e.message }
+    }
+    log.error('Unexpected error regenerating AI content', { callId, error: (e as Error).message })
+    return { success: false, error: `Error al generar contenido: ${(e as Error).message}` }
   }
 }

@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { differenceInDays, startOfMonth, getWeekOfMonth } from 'date-fns'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { CHECKIN_GRACE_DAYS } from '@/lib/constants'
+import { CHECKIN_GRACE_DAYS, PHASE_ALERT_DAYS_BEFORE } from '@/lib/constants'
 import { logger } from '@/lib/logger'
+import { toTitleCase } from '@/lib/utils'
+
+export const maxDuration = 30
 
 const log = logger('api:cron:generate-alerts')
 
@@ -57,21 +60,17 @@ export async function POST(request: NextRequest) {
       return existingAlertSet.has(`${clientId}:${type}`)
     }
 
-    // Get latest check-in per client
-    const { data: allCheckins, error: checkinsError } = await supabase
-      .from('check_ins')
-      .select('client_id, submitted_at')
-      .order('submitted_at', { ascending: false })
+    // Get latest check-in per client (optimized with DISTINCT ON)
+    const { data: latestCheckins, error: checkinsError } = await supabase
+      .rpc('get_latest_checkin_per_client')
 
     if (checkinsError) {
-      log.error('Failed to fetch check-ins', { error: checkinsError.message })
+      log.error('Failed to fetch latest check-ins', { error: checkinsError.message })
     }
 
     const lastCheckinByClient = new Map<string, string>()
-    for (const ci of allCheckins || []) {
-      if (!lastCheckinByClient.has(ci.client_id)) {
-        lastCheckinByClient.set(ci.client_id, ci.submitted_at)
-      }
+    for (const ci of (latestCheckins || []) as { client_id: string; latest_submitted_at: string }[]) {
+      lastCheckinByClient.set(ci.client_id, ci.latest_submitted_at)
     }
 
     // Get calls this month per client
@@ -130,7 +129,7 @@ export async function POST(request: NextRequest) {
               client_id: client.id,
               type: 'missed_checkin',
               severity: 'high',
-              message: `${client.first_name} ${client.last_name} no ha enviado check-in en ${daysSinceCheckin} días`,
+              message: `${toTitleCase(client.first_name)} ${toTitleCase(client.last_name)} no ha enviado check-in en ${daysSinceCheckin} días`,
             })
           }
         }
@@ -142,8 +141,8 @@ export async function POST(request: NextRequest) {
           if (!isNaN(phaseChangeDate.getTime())) {
             const daysUntilPhaseChange = differenceInDays(phaseChangeDate, now)
             const alertWindow = client.custom_phase_duration_days && client.custom_phase_duration_days > 0
-              ? Math.min(3, client.custom_phase_duration_days)
-              : 3
+              ? Math.min(PHASE_ALERT_DAYS_BEFORE, client.custom_phase_duration_days)
+              : PHASE_ALERT_DAYS_BEFORE
             if (daysUntilPhaseChange >= 0 && daysUntilPhaseChange <= alertWindow && client.current_phase < 3) {
               const phaseNames: Record<number, string> = {
                 2: 'Fase 2 - Reintroducción',
@@ -155,7 +154,7 @@ export async function POST(request: NextRequest) {
                 client_id: client.id,
                 type: 'phase_change',
                 severity: daysUntilPhaseChange <= 1 ? 'high' : 'medium',
-                message: `${client.first_name} ${client.last_name} cambia a ${phaseNames[nextPhase] || `fase ${nextPhase}`} en ${daysUntilPhaseChange} días${customNote}. Preparar indicaciones de alimentación.`,
+                message: `${toTitleCase(client.first_name)} ${toTitleCase(client.last_name)} cambia a ${phaseNames[nextPhase] || `fase ${nextPhase}`} en ${daysUntilPhaseChange} días${customNote}. Preparar indicaciones de alimentación.`,
               })
             }
           }
@@ -168,7 +167,7 @@ export async function POST(request: NextRequest) {
               client_id: client.id,
               type: 'renewal_approaching',
               severity: 'medium',
-              message: `Contactar a ${client.first_name} ${client.last_name} para renovación (programa termina en ${daysUntilEnd} días)`,
+              message: `Contactar a ${toTitleCase(client.first_name)} ${toTitleCase(client.last_name)} para renovación (programa termina en ${daysUntilEnd} días)`,
             })
           }
         }
@@ -185,7 +184,7 @@ export async function POST(request: NextRequest) {
                   client_id: client.id,
                   type: 'training_plan_expiring',
                   severity: 'medium',
-                  message: `Plan de entrenamiento de ${client.first_name} ${client.last_name} vence en ${daysUntilPlanEnd} días`,
+                  message: `Plan de entrenamiento de ${toTitleCase(client.first_name)} ${toTitleCase(client.last_name)} vence en ${daysUntilPlanEnd} días`,
                 })
               }
             }
@@ -204,7 +203,7 @@ export async function POST(request: NextRequest) {
               client_id: client.id,
               type: 'no_call_logged',
               severity: 'high',
-              message: `${client.first_name} ${client.last_name}: ${callsThisMonth} llamadas registradas de ${expectedCalls} esperadas este mes`,
+              message: `${toTitleCase(client.first_name)} ${toTitleCase(client.last_name)}: ${callsThisMonth} llamadas registradas de ${expectedCalls} esperadas este mes`,
             })
           }
         }
@@ -216,7 +215,7 @@ export async function POST(request: NextRequest) {
               client_id: client.id,
               type: 'program_ending',
               severity: 'low',
-              message: `Programa de ${client.first_name} ${client.last_name} termina en ${daysUntilEnd} días`,
+              message: `Programa de ${toTitleCase(client.first_name)} ${toTitleCase(client.last_name)} termina en ${daysUntilEnd} días`,
             })
           }
         }
@@ -230,7 +229,7 @@ export async function POST(request: NextRequest) {
               client_id: client.id,
               type: 'birthday',
               severity: 'low',
-              message: `¡Hoy es el cumpleaños de ${client.first_name} ${client.last_name}! Cumple ${age} años 🎂`,
+              message: `¡Hoy es el cumpleaños de ${toTitleCase(client.first_name)} ${toTitleCase(client.last_name)}! Cumple ${age} años 🎂`,
             })
           }
         }
@@ -267,7 +266,7 @@ export async function POST(request: NextRequest) {
           client_id: call.client_id,
           type: 'upcoming_call',
           severity: 'medium',
-          message: `Llamada programada con ${client.first_name} ${client.last_name} hoy a las ${formattedTime}`,
+          message: `Llamada programada con ${toTitleCase(client.first_name)} ${toTitleCase(client.last_name)} hoy a las ${formattedTime}`,
         })
       }
     }
@@ -276,8 +275,9 @@ export async function POST(request: NextRequest) {
     if (alertsToCreate.length > 0) {
       const { error } = await supabase.from('alerts').insert(alertsToCreate)
       if (error) {
+        log.error('Failed to insert alerts', { error: error.message })
         return NextResponse.json(
-          { error: 'Failed to create alerts', detail: error.message },
+          { error: 'Failed to create alerts' },
           { status: 500 }
         )
       }

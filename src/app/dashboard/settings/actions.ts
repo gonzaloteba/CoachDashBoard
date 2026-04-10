@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser, getScheduledEvents, getEventInvitees, extractMeetLink } from '@/lib/calendly'
 import { findClientInList } from '@/lib/typeform-helpers'
+import { runTypeformSync } from '@/lib/typeform-sync'
 import { logger } from '@/lib/logger'
 
 const log = logger('actions:settings')
@@ -110,36 +111,87 @@ export async function fixOrphanCalls(): Promise<{ success: boolean; message: str
     return { success: false, message: 'No eres un coach registrado', fixed: 0 }
   }
 
-  // Find calls without coach_id
-  const { data: orphanCalls, error } = await adminClient
+  const parts: string[] = []
+
+  // Fix calls without coach_id
+  const { data: orphanCalls } = await adminClient
     .from('calls')
     .select('id')
     .is('coach_id', null)
 
-  if (error) {
-    return { success: false, message: `Error: ${error.message}`, fixed: 0 }
+  if (orphanCalls && orphanCalls.length > 0) {
+    const { error: updateError } = await adminClient
+      .from('calls')
+      .update({ coach_id: coachRow.id })
+      .is('coach_id', null)
+
+    if (updateError) {
+      return { success: false, message: `Error al actualizar llamadas: ${updateError.message}`, fixed: 0 }
+    }
+    parts.push(`${orphanCalls.length} llamada(s) asignadas`)
+    log.info('Fixed orphan calls', { count: orphanCalls.length, coachId: coachRow.id })
   }
 
-  if (!orphanCalls || orphanCalls.length === 0) {
-    return { success: true, message: 'Todas las llamadas ya tienen coach asignado', fixed: 0 }
-  }
-
-  const { error: updateError } = await adminClient
-    .from('calls')
-    .update({ coach_id: coachRow.id })
+  // Fix clients without coach_id — assign ALL to this coach
+  const { data: orphanClients } = await adminClient
+    .from('clients')
+    .select('id')
     .is('coach_id', null)
 
-  if (updateError) {
-    return { success: false, message: `Error al actualizar: ${updateError.message}`, fixed: 0 }
+  if (orphanClients && orphanClients.length > 0) {
+    const { error: clientUpdateError } = await adminClient
+      .from('clients')
+      .update({ coach_id: coachRow.id })
+      .is('coach_id', null)
+
+    if (clientUpdateError) {
+      return { success: false, message: `Error al actualizar clientes: ${clientUpdateError.message}`, fixed: 0 }
+    }
+    parts.push(`${orphanClients.length} cliente(s) sin coach asignado(s)`)
+    log.info('Fixed orphan clients', { count: orphanClients.length, coachId: coachRow.id })
   }
 
-  log.info('Fixed orphan calls', { count: orphanCalls.length, coachId: coachRow.id })
-  return { success: true, message: `${orphanCalls.length} llamada(s) asignadas a tu cuenta`, fixed: orphanCalls.length }
+  // Fix clients with invalid coach_id (pointing to a non-existent coach)
+  const { data: allCoachIds } = await adminClient
+    .from('coaches')
+    .select('id')
+  const validCoachIds = new Set((allCoachIds || []).map(c => c.id))
+
+  const { data: allClients } = await adminClient
+    .from('clients')
+    .select('id, coach_id')
+    .not('coach_id', 'is', null)
+
+  const invalidClients = (allClients || []).filter(c => !validCoachIds.has(c.coach_id))
+  if (invalidClients.length > 0) {
+    const invalidIds = invalidClients.map(c => c.id)
+    const { error: fixError } = await adminClient
+      .from('clients')
+      .update({ coach_id: coachRow.id })
+      .in('id', invalidIds)
+
+    if (fixError) {
+      return { success: false, message: `Error al reparar coach_id inválidos: ${fixError.message}`, fixed: 0 }
+    }
+    parts.push(`${invalidClients.length} cliente(s) con coach inválido reparado(s)`)
+    log.info('Fixed clients with invalid coach_id', { count: invalidClients.length, coachId: coachRow.id })
+  }
+
+  if (parts.length === 0) {
+    return { success: true, message: 'Todo está asignado correctamente', fixed: 0 }
+  }
+
+  return {
+    success: true,
+    message: `${parts.join(', ')} a tu cuenta`,
+    fixed: (orphanCalls?.length || 0) + (orphanClients?.length || 0),
+  }
 }
 
 export async function syncTypeformNow(): Promise<{
   success: boolean
   message: string
+  debug?: string[]
 }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -148,34 +200,26 @@ export async function syncTypeformNow(): Promise<{
   }
 
   try {
-    const cronSecret = process.env.CRON_SECRET
-    if (!cronSecret) {
-      return { success: false, message: 'CRON_SECRET no configurado' }
-    }
-
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL
-      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-      || 'http://localhost:3000'
-
-    const res = await fetch(`${baseUrl}/api/sync/typeform`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${cronSecret}` },
-    })
-
-    if (!res.ok) {
-      const text = await res.text()
-      return { success: false, message: `Error ${res.status}: ${text}` }
-    }
-
-    const data = await res.json()
+    const data = await runTypeformSync()
     const r = data.results
     const parts: string[] = []
     if (r?.audit?.created > 0) parts.push(`${r.audit.created} cliente(s) nuevo(s)`)
     if (r?.audit?.updated > 0) parts.push(`${r.audit.updated} auditoría(s) actualizada(s)`)
+    if (r?.audit?.skipped > 0) parts.push(`${r.audit.skipped} auditoría(s) sin nombre`)
     if (r?.checkin?.inserted > 0) parts.push(`${r.checkin.inserted} check-in(s) sincronizado(s)`)
+    if (r?.checkin?.skipped > 0) parts.push(`${r.checkin.skipped} check-in(s) ya existente(s)`)
     if (parts.length === 0) parts.push('No hay datos nuevos')
 
-    return { success: true, message: parts.join(', ') }
+    const debug = [
+      `Auditorías: ${r.audit.fetched} fetched, ${r.audit.created} created, ${r.audit.updated} updated, ${r.audit.skipped} skipped`,
+      `Check-ins: ${r.checkin.fetched} fetched, ${r.checkin.inserted} inserted, ${r.checkin.skipped} skipped`,
+      ...(r.audit.errors.length > 0 ? [`Errores audit: ${r.audit.errors.join('; ')}`] : []),
+      ...(r.checkin.errors.length > 0 ? [`Errores check-in: ${r.checkin.errors.join('; ')}`] : []),
+      ...r.audit.debug,
+      ...r.checkin.debug,
+    ]
+
+    return { success: true, message: parts.join(', '), debug }
   } catch (err) {
     log.error('Manual Typeform sync failed', { error: (err as Error).message })
     return { success: false, message: `Error: ${(err as Error).message}` }
@@ -188,6 +232,8 @@ export async function syncCalendlyNow(): Promise<{
   synced?: number
   skipped?: number
   unmatched?: number
+  unmatchedNames?: string[]
+  debug?: string[]
 }> {
   // Verify authenticated user
   const supabase = await createClient()
@@ -202,9 +248,9 @@ export async function syncCalendlyNow(): Promise<{
     const maxDate = new Date(now)
     maxDate.setDate(maxDate.getDate() + 30)
 
-    // Also check 24h in the past
+    // Check 7 days in the past to catch recent calls
     const minDate = new Date(now)
-    minDate.setHours(minDate.getHours() - 24)
+    minDate.setDate(minDate.getDate() - 7)
 
     // Resolve coach_id for the current user
     const { data: coachRow } = await adminClient
@@ -218,14 +264,13 @@ export async function syncCalendlyNow(): Promise<{
     const events = await getScheduledEvents(calendlyUser.uri, minDate.toISOString(), maxDate.toISOString())
 
     if (events.length === 0) {
-      return { success: true, message: 'No hay eventos en Calendly', synced: 0 }
+      return { success: true, message: 'No hay eventos en Calendly (últimos 7 días + próximos 30 días)', synced: 0 }
     }
 
-    // Load all active clients for name matching
+    // Load ALL clients for name matching (not just active — inactive clients may have calls too)
     const { data: clients } = await adminClient
       .from('clients')
       .select('id, first_name, last_name')
-      .eq('status', 'active')
 
     // Check existing calls
     const eventUris = events.map(e => e.uri)
@@ -238,9 +283,18 @@ export async function syncCalendlyNow(): Promise<{
       (existingCalls || []).map(c => c.calendly_event_uri)
     )
 
+    // Also load client emails for email-based matching fallback
+    const { data: clientsWithEmail } = await adminClient
+      .from('clients')
+      .select('id, first_name, last_name, email')
+
     let synced = 0
     let skipped = 0
     let unmatched = 0
+    const unmatchedNames: string[] = []
+    const debug: string[] = []
+
+    debug.push(`Clientes en DB: ${(clients || []).map(c => `${c.first_name} ${c.last_name}`).join(', ')}`)
 
     for (const event of events) {
       if (existingUriSet.has(event.uri)) {
@@ -258,17 +312,39 @@ export async function syncCalendlyNow(): Promise<{
       const activeInvitee = invitees.find(i => i.status === 'active')
       if (!activeInvitee) continue
 
-      const nameParts = activeInvitee.name.trim().split(/\s+/)
+      // Split name: handle both "Gonzalo Teba" and concatenated "GonzaloTeba"
+      let rawName = activeInvitee.name.trim()
+      // If name has no spaces but has camelCase (e.g. "GonzaloTeba"), split on uppercase boundaries
+      if (!rawName.includes(' ') && /[a-z][A-Z]/.test(rawName)) {
+        rawName = rawName.replace(/([a-z])([A-Z])/g, '$1 $2')
+      }
+      const nameParts = rawName.split(/\s+/)
       const firstName = nameParts[0] || ''
       const lastName = nameParts.slice(1).join(' ') || ''
 
-      const matchedClient = findClientInList(clients || [], firstName, lastName)
+      debug.push(`Calendly invitee: "${activeInvitee.name}" → split: "${firstName}" "${lastName}" (email: ${activeInvitee.email})`)
+
+      // Try name matching first
+      let matchedClient = findClientInList(clients || [], firstName, lastName)
+
+      // Fallback: try matching by email
+      if (!matchedClient && activeInvitee.email && clientsWithEmail) {
+        const emailLower = activeInvitee.email.toLowerCase().trim()
+        const emailMatch = clientsWithEmail.find(
+          c => c.email && c.email.toLowerCase().trim() === emailLower
+        )
+        if (emailMatch) {
+          matchedClient = { id: emailMatch.id }
+          debug.push(`  → Matched by email to ${emailMatch.first_name} ${emailMatch.last_name}`)
+        }
+      }
 
       if (!matchedClient) {
         log.warn('Could not match Calendly invitee', {
           inviteeName: activeInvitee.name,
           inviteeEmail: activeInvitee.email,
         })
+        unmatchedNames.push(`${activeInvitee.name} (${activeInvitee.email})`)
         unmatched++
         continue
       }
@@ -302,14 +378,21 @@ export async function syncCalendlyNow(): Promise<{
       })
     }
 
+    const parts: string[] = []
+    if (synced > 0) parts.push(`${synced} llamada(s) nueva(s) sincronizada(s)`)
+    if (skipped > 0) parts.push(`${skipped} ya existente(s)`)
+    if (unmatched > 0) parts.push(`${unmatched} sin cliente asociado`)
+    if (unmatchedNames.length > 0) parts.push(`No encontrados: ${unmatchedNames.join(', ')}`)
+    if (parts.length === 0) parts.push('No hay llamadas nuevas para sincronizar')
+
     return {
       success: true,
-      message: synced > 0
-        ? `Sincronizadas ${synced} llamada(s) nuevas`
-        : 'No hay llamadas nuevas para sincronizar',
+      message: parts.join('. ') + ` (${events.length} evento(s) en Calendly)`,
       synced,
       skipped,
       unmatched,
+      unmatchedNames,
+      debug,
     }
   } catch (err) {
     log.error('Manual Calendly sync failed', { error: (err as Error).message })

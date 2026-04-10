@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import { PHASE_LABELS, PHASE_DURATIONS_DAYS, PHASE_ALERT_DAYS_BEFORE } from '@/lib/constants'
 import { differenceInDays } from 'date-fns'
 import { AlertTriangle, Clock, Pencil, Check, X } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { useToast } from '@/components/ui/toast'
 import type { NutritionPhase } from '@/lib/types'
 
 interface PhaseTrackerProps {
@@ -58,57 +58,36 @@ export function PhaseTracker({ clientId, currentPhase, startDate, endDate, phase
   const [saving, setSaving] = useState(false)
   const [changingPhase, setChangingPhase] = useState(false)
   const router = useRouter()
+  const { toast } = useToast()
 
   async function handlePhaseClick(newPhase: NutritionPhase) {
     if (newPhase === currentPhase || changingPhase) return
-
     setChangingPhase(true)
-    const supabase = createClient()
 
     try {
       const defaultDays = PHASE_DEFAULT_DAYS[newPhase]
+      const res = await fetch(`/api/clients/${clientId}/phase`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phase: newPhase,
+          custom_phase_duration_days: defaultDays === null ? -1 : undefined,
+        }),
+      })
 
-      // Calculate phase_change_date
-      let newPhaseChangeDate: string | null = null
-      if (defaultDays) {
-        const changeDate = new Date()
-        changeDate.setDate(changeDate.getDate() + defaultDays)
-        newPhaseChangeDate = changeDate.toISOString().split('T')[0]
+      if (!res.ok) {
+        const text = await res.text()
+        console.error('Phase update failed:', res.status, text)
+        let detail = ''
+        try { detail = JSON.parse(text)?.error ?? '' } catch { /* ignore */ }
+        toast(`No se pudo cambiar la fase (${res.status}). ${detail}`, 'error')
+        return
       }
-
-      // Update phase + phase_change_date + reset custom duration
-      const updateData: Record<string, unknown> = {
-        current_phase: newPhase,
-        phase_change_date: newPhaseChangeDate,
-        custom_phase_duration_days: defaultDays === null ? -1 : null,
-      }
-
-      const { error } = await supabase
-        .from('clients')
-        .update(updateData)
-        .eq('id', clientId)
-
-      if (error) {
-        const { error: retryError } = await supabase
-          .from('clients')
-          .update({
-            current_phase: newPhase,
-            phase_change_date: newPhaseChangeDate,
-          })
-          .eq('id', clientId)
-
-        if (retryError) return
-      }
-
-      // Resolve existing phase_change alerts
-      await supabase
-        .from('alerts')
-        .update({ is_resolved: true, resolved_at: new Date().toISOString() })
-        .eq('client_id', clientId)
-        .eq('type', 'phase_change')
-        .eq('is_resolved', false)
 
       router.refresh()
+    } catch (err) {
+      console.error('Phase update error:', err)
+      toast('Error de conexión al cambiar la fase.', 'error')
     } finally {
       setChangingPhase(false)
     }
@@ -116,67 +95,39 @@ export function PhaseTracker({ clientId, currentPhase, startDate, endDate, phase
 
   async function saveInterval() {
     setSaving(true)
-    const supabase = createClient()
 
     try {
-      if (isIndefiniteInput) {
-        // Set indefinite
-        const { error } = await supabase
-          .from('clients')
-          .update({
-            custom_phase_duration_days: -1,
-            phase_change_date: null,
-          })
-          .eq('id', clientId)
+      const body: Record<string, unknown> = {}
 
-        if (error) {
-          // Fallback without custom column
-          await supabase
-            .from('clients')
-            .update({ phase_change_date: null })
-            .eq('id', clientId)
-        }
+      if (isIndefiniteInput) {
+        body.custom_phase_duration_days = -1
       } else {
         const days = parseInt(intervalValue, 10)
         if (isNaN(days) || days < 1) {
           setSaving(false)
           return
         }
-
-        const changeDate = new Date()
-        changeDate.setDate(changeDate.getDate() + days)
-        const newPhaseChangeDate = changeDate.toISOString().split('T')[0]
-
-        const defaultDuration = PHASE_DURATIONS_DAYS[currentPhase]
-        const customValue = days === defaultDuration ? null : days
-
-        const { error } = await supabase
-          .from('clients')
-          .update({
-            custom_phase_duration_days: customValue,
-            phase_change_date: newPhaseChangeDate,
-          })
-          .eq('id', clientId)
-
-        if (error) {
-          // Fallback without custom column
-          await supabase
-            .from('clients')
-            .update({ phase_change_date: newPhaseChangeDate })
-            .eq('id', clientId)
-        }
+        body.custom_phase_duration_days = days
       }
 
-      // Resolve existing phase_change alerts
-      await supabase
-        .from('alerts')
-        .update({ is_resolved: true, resolved_at: new Date().toISOString() })
-        .eq('client_id', clientId)
-        .eq('type', 'phase_change')
-        .eq('is_resolved', false)
+      const res = await fetch(`/api/clients/${clientId}/phase`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      if (!res.ok) {
+        const text = await res.text()
+        console.error('Interval update failed:', text)
+        toast('No se pudo actualizar el intervalo.', 'error')
+        return
+      }
 
       setEditing(false)
       router.refresh()
+    } catch (err) {
+      console.error('Interval update error:', err)
+      toast('Error de conexión al actualizar el intervalo.', 'error')
     } finally {
       setSaving(false)
     }

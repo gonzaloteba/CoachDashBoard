@@ -167,15 +167,44 @@ export async function POST(request: NextRequest) {
             .update({ initial_photo_url: permanentUrl })
             .eq('id', client.id)
         }
-      } catch {
-        // Photo persistence is non-critical — client was already created
+      } catch (e) {
+        log.warn('Photo persistence failed (non-critical)', { clientId: client?.id, error: (e as Error).message })
       }
 
       // Create an initial check-in from the audit data (non-fatal)
       try {
         await createInitialCheckIn(supabase, client.id, answerMap, submittedAt, responseId)
-      } catch {
-        // Initial check-in is non-critical — client was already created
+      } catch (e) {
+        log.warn('Initial check-in creation failed (non-critical)', { clientId: client?.id, error: (e as Error).message })
+      }
+
+      // Process Calendly scheduling data from audit form (non-fatal)
+      try {
+        const calendlyData = extractCalendlyData(answers as TypeformAnswer[])
+        if (calendlyData && client) {
+          log.info('Calendly data found in audit form, creating scheduled call', {
+            clientId: client.id,
+            clientName: `${firstName} ${lastName}`,
+            scheduled_at: calendlyData.scheduled_at,
+            event_uri: calendlyData.event_uri || 'none',
+          })
+          await createScheduledCall(supabase, client.id, calendlyData, firstName, lastName, defaultCoachId, 'audit')
+          calendlyAction = 'call_scheduled'
+        } else if (client) {
+          // No Calendly embed data — try to find upcoming events via Calendly API
+          log.info('No Calendly embed data in audit, checking Calendly API for upcoming events', {
+            clientName: `${firstName} ${lastName}`,
+          })
+          calendlyAction = await syncCalendlyForClient(supabase, client.id, firstName, lastName, defaultCoachId)
+        }
+      } catch (calendlyError) {
+        const errMsg = (calendlyError as Error).message
+        log.error('Failed to process Calendly scheduling data from audit', {
+          clientId: client?.id || 'unknown',
+          clientName: `${firstName} ${lastName}`,
+          error: errMsg,
+        })
+        calendlyAction = `error: ${errMsg}`
       }
 
     } else if (formId === CHECKIN_FORM_ID) {
@@ -264,8 +293,9 @@ export async function POST(request: NextRequest) {
       ...(calendlyAction ? { calendly: calendlyAction } : {}),
     })
   } catch (error) {
+    log.error('Typeform webhook failed', { error: (error as Error).message })
     return NextResponse.json(
-      { error: 'Internal server error', detail: (error as Error).message },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -299,8 +329,8 @@ async function handleCheckIn(
     if (checkInData.photo_urls && Array.isArray(checkInData.photo_urls) && checkInData.photo_urls.length > 0) {
       checkInData.photo_urls = await persistPhotos(supabase, checkInData.photo_urls, clientId, 'checkin')
     }
-  } catch {
-    // Photo persistence failed — check-in will keep original Typeform temp URLs
+  } catch (e) {
+    log.warn('Check-in photo persistence failed', { clientId, error: (e as Error).message })
   }
 
   const { error: insertError } = await supabase
@@ -317,8 +347,8 @@ async function handleCheckIn(
       .eq('client_id', clientId)
       .eq('type', 'missed_checkin')
       .eq('is_resolved', false)
-  } catch {
-    // Alert resolution is non-critical — check-in data is already persisted
+  } catch (e) {
+    log.warn('Alert resolution failed (non-critical)', { clientId, error: (e as Error).message })
   }
 }
 
@@ -454,7 +484,8 @@ async function createScheduledCall(
   calendlyData: { scheduled_at: string; event_uri: string | null; invitee_uri: string | null },
   firstName: string,
   lastName: string,
-  coachId: string | null
+  coachId: string | null,
+  source: 'check-in' | 'audit' = 'check-in'
 ) {
   const scheduledDate = new Date(calendlyData.scheduled_at)
   const callDate = scheduledDate.toISOString().split('T')[0]
@@ -483,7 +514,7 @@ async function createScheduledCall(
       scheduled_at: calendlyData.scheduled_at,
       calendly_event_uri: calendlyData.event_uri,
       duration_minutes: 15,
-      notes: 'Llamada agendada desde Calendly (check-in)',
+      notes: `Llamada agendada desde Calendly (${source})`,
     })
 
   if (callError) {
@@ -566,7 +597,12 @@ async function syncCalendlyForClient(
       if (!activeInvitee) continue
 
       // Check if the invitee matches this client
-      const nameParts = activeInvitee.name.trim().split(/\s+/)
+      // Handle concatenated names like "GonzaloTeba" → "Gonzalo Teba"
+      let invRawName = activeInvitee.name.trim()
+      if (!invRawName.includes(' ') && /[a-z][A-Z]/.test(invRawName)) {
+        invRawName = invRawName.replace(/([a-z])([A-Z])/g, '$1 $2')
+      }
+      const nameParts = invRawName.split(/\s+/)
       const invFirstName = nameParts[0] || ''
       const invLastName = nameParts.slice(1).join(' ') || ''
 

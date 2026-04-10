@@ -50,14 +50,17 @@ export default async function AlertsPage({ searchParams }: Props) {
     )
   }
 
-  // Get client IDs for the filtered coach
+  // Get clients for the filtered coach (used for alert filtering and manual alert creation)
   let clientIds: string[] | null = null
+  let clientList: { id: string; first_name: string; last_name: string }[] = []
   if (filterCoachId) {
     const { data: clients } = await supabase
       .from('clients')
-      .select('id')
-      .eq('coach_id', filterCoachId)
+      .select('id, first_name, last_name')
+      .or(`coach_id.eq.${filterCoachId},coach_id.is.null`)
+      .order('first_name')
     clientIds = clients?.map(c => c.id) ?? []
+    clientList = clients ?? []
   }
 
   const alertsQuery = supabase
@@ -91,6 +94,7 @@ export default async function AlertsPage({ searchParams }: Props) {
         )}
         <AlertList
           alerts={(alerts as (Alert & { client: { first_name: string; last_name: string } })[]) || []}
+          clients={clientList}
         />
       </div>
     </div>

@@ -4,6 +4,8 @@ import { getCurrentUser, getScheduledEvents, getEventInvitees, extractMeetLink }
 import { findClientInList } from '@/lib/typeform-helpers'
 import { logger } from '@/lib/logger'
 
+export const maxDuration = 60
+
 const log = logger('api:calendly:sync')
 
 export async function POST(request: NextRequest) {
@@ -42,11 +44,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'No upcoming events', synced: 0 })
     }
 
-    // Load all active clients for name matching
+    // Load all clients for name matching (include non-active to avoid missing matches)
     const { data: clients, error: clientsError } = await supabase
       .from('clients')
       .select('id, first_name, last_name')
-      .eq('status', 'active')
 
     if (clientsError) {
       log.error('Failed to fetch clients', { error: clientsError.message })
@@ -93,11 +94,30 @@ export async function POST(request: NextRequest) {
       }
 
       // Try to match invitee name to a client
-      const nameParts = activeInvitee.name.trim().split(/\s+/)
+      // Handle concatenated names like "GonzaloTeba" → "Gonzalo Teba"
+      let rawName = activeInvitee.name.trim()
+      if (!rawName.includes(' ') && /[a-z][A-Z]/.test(rawName)) {
+        rawName = rawName.replace(/([a-z])([A-Z])/g, '$1 $2')
+      }
+      const nameParts = rawName.split(/\s+/)
       const firstName = nameParts[0] || ''
       const lastName = nameParts.slice(1).join(' ') || ''
 
-      const matchedClient = findClientInList(clients || [], firstName, lastName)
+      let matchedClient = findClientInList(clients || [], firstName, lastName)
+
+      // Fallback: try email matching
+      if (!matchedClient && activeInvitee.email) {
+        const emailLower = activeInvitee.email.toLowerCase().trim()
+        const { data: emailMatch } = await supabase
+          .from('clients')
+          .select('id')
+          .ilike('email', emailLower)
+          .limit(1)
+          .single()
+        if (emailMatch) {
+          matchedClient = { id: emailMatch.id }
+        }
+      }
 
       if (!matchedClient) {
         log.warn('Could not match Calendly invitee to client', {
@@ -151,7 +171,7 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     log.error('Calendly sync failed', { error: (err as Error).message })
     return NextResponse.json(
-      { error: 'Internal server error', detail: (err as Error).message },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
