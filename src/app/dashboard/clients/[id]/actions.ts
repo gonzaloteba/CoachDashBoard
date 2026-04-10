@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { clientIdSchema, updateEndDateSchema, toggleBadgeSchema, callIdSchema } from '@/lib/validations'
 import { logger } from '@/lib/logger'
+import { generateCoachActions, generateTranscriptSummary, generatePositiveHighlights } from '@/lib/transcript-ai'
 
 const log = logger('actions:client')
 
@@ -210,6 +211,74 @@ export async function toggleCoachActionItem(callId: string, itemIndex: number, c
     return { success: true, allCompleted: result?.allCompleted ?? false }
   } catch (e) {
     log.error('Unexpected error toggling action item', { callId, error: (e as Error).message })
+    return { success: false, error: 'Error inesperado' }
+  }
+}
+
+export async function regenerateCallAI(callId: string) {
+  const parsed = callIdSchema.safeParse(callId)
+  if (!parsed.success) {
+    return { success: false, error: 'Invalid call ID' }
+  }
+
+  const adminSupabase = getAdminClient()
+  const { data: call } = await adminSupabase
+    .from('calls')
+    .select('client_id, transcript')
+    .eq('id', parsed.data)
+    .single()
+
+  if (!call) return { success: false, error: 'Llamada no encontrada' }
+  if (!call.transcript) return { success: false, error: 'No hay transcript para analizar' }
+
+  const auth = await authorizeForClient(call.client_id)
+  if (!auth.authorized) return { success: false, error: auth.error }
+
+  try {
+    // Get client name for context
+    const { data: client } = await adminSupabase
+      .from('clients')
+      .select('first_name, last_name')
+      .eq('id', call.client_id)
+      .single()
+
+    const clientName = client
+      ? `${client.first_name} ${client.last_name || ''}`.trim()
+      : undefined
+
+    const [coachActions, transcriptSummary, positiveHighlights] = await Promise.all([
+      generateCoachActions(call.transcript, clientName),
+      generateTranscriptSummary(call.transcript, clientName),
+      generatePositiveHighlights(call.transcript, clientName),
+    ])
+
+    const updates: Record<string, unknown> = {}
+    if (coachActions) {
+      updates.coach_actions = coachActions
+      updates.coach_actions_completed = false
+      updates.coach_actions_completed_items = []
+    }
+    if (transcriptSummary) updates.transcript_summary = transcriptSummary
+    if (positiveHighlights) updates.positive_highlights = positiveHighlights
+
+    if (Object.keys(updates).length === 0) {
+      return { success: false, error: 'La AI no pudo generar contenido. Verifica la API key.' }
+    }
+
+    const { error } = await adminSupabase
+      .from('calls')
+      .update(updates)
+      .eq('id', parsed.data)
+
+    if (error) {
+      log.error('Failed to save regenerated AI content', { callId, error: error.message })
+      return { success: false, error: 'Error al guardar el contenido generado' }
+    }
+
+    revalidateDashboard()
+    return { success: true }
+  } catch (e) {
+    log.error('Unexpected error regenerating AI content', { callId, error: (e as Error).message })
     return { success: false, error: 'Error inesperado' }
   }
 }

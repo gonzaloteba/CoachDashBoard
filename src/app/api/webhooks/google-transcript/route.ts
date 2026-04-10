@@ -4,6 +4,9 @@ import { getDefaultCoachId } from '@/lib/auth'
 import { findClientByName } from '@/lib/typeform-helpers'
 import { generateCoachActions, generateTranscriptSummary, generatePositiveHighlights } from '@/lib/transcript-ai'
 
+// Allow up to 60s for AI generation + DB operations
+export const maxDuration = 60
+
 /**
  * POST /api/webhooks/google-transcript
  *
@@ -85,21 +88,49 @@ export async function POST(request: NextRequest) {
       ])
 
       // Update transcript on existing call
-      const { error: updateError } = await supabase
+      const updatePayload: Record<string, unknown> = {
+        transcript,
+        ...(body.meet_link ? { meet_link: body.meet_link } : {}),
+        ...(body.notes ? { notes: body.notes } : {}),
+        ...(updatedActions ? { coach_actions: updatedActions, coach_actions_completed: false, coach_actions_completed_items: [] } : {}),
+        ...(updatedSummary ? { transcript_summary: updatedSummary } : {}),
+        ...(updatedHighlights ? { positive_highlights: updatedHighlights } : {}),
+      }
+
+      let updateError = (await supabase
         .from('calls')
-        .update({
-          transcript,
-          ...(body.meet_link ? { meet_link: body.meet_link } : {}),
-          ...(body.notes ? { notes: body.notes } : {}),
-          ...(updatedActions ? { coach_actions: updatedActions, coach_actions_completed: false } : {}),
-          ...(updatedSummary ? { transcript_summary: updatedSummary } : {}),
-          ...(updatedHighlights ? { positive_highlights: updatedHighlights } : {}),
-        })
+        .update(updatePayload)
         .eq('id', existingCall.id)
+      ).error
+
+      // Retry once on failure
+      if (updateError) {
+        const { logger } = await import('@/lib/logger')
+        logger('api:webhooks:google-transcript').warn('Update failed, retrying', {
+          callId: existingCall.id,
+          error: updateError.message,
+          code: updateError.code,
+          details: updateError.details,
+          hint: updateError.hint,
+        })
+        updateError = (await supabase
+          .from('calls')
+          .update(updatePayload)
+          .eq('id', existingCall.id)
+        ).error
+      }
 
       if (updateError) {
+        const { logger } = await import('@/lib/logger')
+        logger('api:webhooks:google-transcript').error('Failed to update call after retry', {
+          callId: existingCall.id,
+          error: updateError.message,
+          code: updateError.code,
+          details: updateError.details,
+          hint: updateError.hint,
+        })
         return NextResponse.json(
-          { error: 'Failed to update call' },
+          { error: 'Failed to update call', details: updateError.message, code: updateError.code },
           { status: 500 }
         )
       }
@@ -109,6 +140,7 @@ export async function POST(request: NextRequest) {
         action: 'transcript_updated',
         call_id: existingCall.id,
         coach_actions_generated: !!updatedActions,
+        summary_generated: !!updatedSummary,
       })
     }
 
@@ -218,8 +250,16 @@ export async function POST(request: NextRequest) {
         .eq('id', scheduledCall.id)
 
       if (updateError) {
+        const { logger } = await import('@/lib/logger')
+        logger('api:webhooks:google-transcript').error('Failed to update scheduled call', {
+          callId: scheduledCall.id,
+          error: updateError.message,
+          code: updateError.code,
+          details: updateError.details,
+          hint: updateError.hint,
+        })
         return NextResponse.json(
-          { error: 'Failed to update scheduled call' },
+          { error: 'Failed to update scheduled call', details: updateError.message, code: updateError.code },
           { status: 500 }
         )
       }
@@ -234,7 +274,11 @@ export async function POST(request: NextRequest) {
         generatePositiveHighlights(transcript, clientName),
       ])
       const aiUpdates: Record<string, unknown> = {}
-      if (coachActions) aiUpdates.coach_actions = coachActions
+      if (coachActions) {
+        aiUpdates.coach_actions = coachActions
+        aiUpdates.coach_actions_completed = false
+        aiUpdates.coach_actions_completed_items = []
+      }
       if (transcriptSummary) aiUpdates.transcript_summary = transcriptSummary
       if (positiveHighlights) aiUpdates.positive_highlights = positiveHighlights
       if (Object.keys(aiUpdates).length > 0) {
@@ -285,8 +329,15 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (insertError) {
+      const { logger } = await import('@/lib/logger')
+      logger('api:webhooks:google-transcript').error('Failed to create call', {
+        error: insertError.message,
+        code: insertError.code,
+        details: insertError.details,
+        hint: insertError.hint,
+      })
       return NextResponse.json(
-        { error: 'Failed to create call' },
+        { error: 'Failed to create call', details: insertError.message, code: insertError.code },
         { status: 500 }
       )
     }

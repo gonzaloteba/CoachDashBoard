@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { cn, inputClass, textareaClass } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
-import { completeCoachActions as completeCoachActionsAction } from '@/app/dashboard/clients/[id]/actions'
+import { completeCoachActions as completeCoachActionsAction, regenerateCallAI } from '@/app/dashboard/clients/[id]/actions'
 import type { Call } from '@/lib/types'
 
 interface CallsLogProps {
@@ -19,6 +19,7 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
   const [loading, setLoading] = useState(false)
   const [expandedCall, setExpandedCall] = useState<string | null>(null)
   const [completingAction, setCompletingAction] = useState<string | null>(null)
+  const [regeneratingAI, setRegeneratingAI] = useState<string | null>(null)
   const router = useRouter()
   const { toast } = useToast()
 
@@ -61,6 +62,18 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
     await completeCoachActionsAction(callId)
     setCompletingAction(null)
     router.refresh()
+  }
+
+  async function handleRegenerateAI(callId: string) {
+    setRegeneratingAI(callId)
+    const result = await regenerateCallAI(callId)
+    setRegeneratingAI(null)
+    if (result.success) {
+      toast('Resumen y acciones generados correctamente', 'success')
+      router.refresh()
+    } else {
+      toast(result.error || 'Error al generar contenido', 'error')
+    }
   }
 
   return (
@@ -195,10 +208,16 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
                       <span className="text-xs text-muted-foreground">
                         {call.duration_minutes} min
                       </span>
-                      {(hasSummary || hasTranscript) && (
+                      {hasSummary && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">
                           <FileText className="h-3 w-3" />
                           Resumen
+                        </span>
+                      )}
+                      {!hasSummary && hasTranscript && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                          <FileText className="h-3 w-3" />
+                          Transcript
                         </span>
                       )}
                       {hasPositiveHighlights && (
@@ -258,6 +277,22 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
                       <div className={cn(!call.meet_link && 'pt-3')}>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Notas</p>
                         <p className="text-sm whitespace-pre-wrap">{call.notes}</p>
+                      </div>
+                    )}
+                    {hasTranscript && (!hasSummary || !hasPositiveHighlights || !hasCoachActions) && (
+                      <div className={cn(!call.meet_link && !call.notes && 'pt-3')}>
+                        <button
+                          onClick={() => handleRegenerateAI(call.id)}
+                          disabled={regeneratingAI === call.id}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50"
+                        >
+                          {regeneratingAI === call.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-3 w-3" />
+                          )}
+                          {regeneratingAI === call.id ? 'Generando...' : 'Generar resumen y acciones'}
+                        </button>
                       </div>
                     )}
                     {hasSummary && (
