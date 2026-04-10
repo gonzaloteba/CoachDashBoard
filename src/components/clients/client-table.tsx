@@ -7,7 +7,6 @@ import { Search, Plus, ClipboardList, Cake, ArrowRightCircle, StickyNote } from 
 import { cn, toTitleCase } from '@/lib/utils'
 import { HEALTH_COLORS, BADGE_CONFIG, CHECKIN_GRACE_DAYS } from '@/lib/constants'
 import { StatusDropdown } from '@/components/clients/status-dropdown'
-import { QuickAddCall } from '@/components/clients/quick-add-call'
 import type { ClientWithHealth } from '@/lib/types'
 
 const CLIENT_FILTERS_KEY = 'clientTableFilters'
@@ -205,15 +204,14 @@ export function ClientTable({ clients }: ClientTableProps) {
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground w-12"></th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Nombre</th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Estado</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Días restantes</th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Check-in Quincenal</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Llamadas/mes</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Días restantes</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={5} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   No se encontraron clientes
                 </td>
               </tr>
@@ -299,9 +297,6 @@ export function ClientTable({ clients }: ClientTableProps) {
                     />
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    {client.days_remaining} días
-                  </td>
-                  <td className="px-4 py-3 text-sm">
                     {(() => {
                       const daysSince = client.last_checkin_date
                         ? Math.floor((Date.now() - new Date(client.last_checkin_date).getTime()) / (1000 * 60 * 60 * 24))
@@ -327,10 +322,7 @@ export function ClientTable({ clients }: ClientTableProps) {
                     })()}
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    <QuickAddCall
-                      clientId={client.id}
-                      callsThisMonth={client.calls_this_month}
-                    />
+                    {client.days_remaining} días
                   </td>
                 </tr>
               ))
