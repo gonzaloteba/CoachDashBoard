@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import Link from 'next/link'
 import { AlertTriangle, CheckCircle, Cake, Phone, StickyNote } from 'lucide-react'
 import { cn, toTitleCase } from '@/lib/utils'
@@ -11,17 +11,54 @@ import { useToast } from '@/components/ui/toast'
 import { CreateAlertDialog } from '@/components/alerts/create-alert-dialog'
 import type { Alert } from '@/lib/types'
 
+const ALERT_FILTERS_KEY = 'alertFilters'
+
 interface AlertListProps {
   alerts: (Alert & { client?: { first_name: string; last_name: string } })[]
   clients?: { id: string; first_name: string; last_name: string }[]
 }
 
 export function AlertList({ alerts, clients }: AlertListProps) {
-  const [typeFilter, setTypeFilter] = useState<string>('all')
-  const [severityFilter, setSeverityFilter] = useState<string>('all')
-  const [showResolved, setShowResolved] = useState(false)
+  const [typeFilter, setTypeFilterRaw] = useState<string>('all')
+  const [severityFilter, setSeverityFilterRaw] = useState<string>('all')
+  const [showResolved, setShowResolvedRaw] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
+
+  // Restore filters from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(ALERT_FILTERS_KEY)
+      if (stored) {
+        const filters = JSON.parse(stored)
+        if (filters.type) setTypeFilterRaw(filters.type)
+        if (filters.severity) setSeverityFilterRaw(filters.severity)
+        if (filters.resolved === true) setShowResolvedRaw(true)
+      }
+    } catch { /* ignore */ }
+  }, [])
+
+  const saveAlertFilters = useCallback((partial: Record<string, unknown>) => {
+    try {
+      const stored = JSON.parse(sessionStorage.getItem(ALERT_FILTERS_KEY) || '{}')
+      sessionStorage.setItem(ALERT_FILTERS_KEY, JSON.stringify({ ...stored, ...partial }))
+    } catch { /* ignore */ }
+  }, [])
+
+  const setTypeFilter = useCallback((value: string) => {
+    setTypeFilterRaw(value)
+    saveAlertFilters({ type: value })
+  }, [saveAlertFilters])
+
+  const setSeverityFilter = useCallback((value: string) => {
+    setSeverityFilterRaw(value)
+    saveAlertFilters({ severity: value })
+  }, [saveAlertFilters])
+
+  const setShowResolved = useCallback((value: boolean) => {
+    setShowResolvedRaw(value)
+    saveAlertFilters({ resolved: value })
+  }, [saveAlertFilters])
 
   const filtered = useMemo(() => alerts.filter((alert) => {
     const matchesType = typeFilter === 'all' || alert.type === typeFilter

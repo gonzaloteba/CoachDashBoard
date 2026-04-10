@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useCallback, useState, useRef, useDeferredValue } from 'react'
+import { useMemo, useCallback, useState, useRef, useDeferredValue, useEffect } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Search, Plus, ClipboardList, Cake, ArrowRightCircle, StickyNote } from 'lucide-react'
@@ -9,6 +9,8 @@ import { PHASE_LABELS, HEALTH_COLORS, BADGE_CONFIG, CHECKIN_GRACE_DAYS } from '@
 import { StatusDropdown } from '@/components/clients/status-dropdown'
 import { QuickAddCall } from '@/components/clients/quick-add-call'
 import type { ClientWithHealth, NutritionPhase } from '@/lib/types'
+
+const CLIENT_FILTERS_KEY = 'clientTableFilters'
 
 interface ClientTableProps {
   clients: ClientWithHealth[]
@@ -32,6 +34,32 @@ export function ClientTable({ clients }: ClientTableProps) {
   const [search, setSearchLocal] = useState(searchParam)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Restore filters from sessionStorage when returning to the page without filter params
+  useEffect(() => {
+    const filterKeys = ['q', 'status', 'health', 'badge', 'checkin']
+    const hasUrlFilters = filterKeys.some(k => searchParams.has(k))
+    if (hasUrlFilters) return
+    try {
+      const stored = sessionStorage.getItem(CLIENT_FILTERS_KEY)
+      if (stored) {
+        const filters = JSON.parse(stored) as Record<string, string>
+        const params = new URLSearchParams(searchParams.toString())
+        let changed = false
+        for (const [key, value] of Object.entries(filters)) {
+          if (value && value !== 'all' && value !== '') {
+            params.set(key, value)
+            changed = true
+          }
+        }
+        if (changed) {
+          if (filters.q) setSearchLocal(filters.q)
+          router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+        }
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Silently update the URL without triggering Next.js navigation
   const replaceUrl = useCallback((params: URLSearchParams) => {
     const qs = params.toString()
@@ -46,6 +74,16 @@ export function ClientTable({ clients }: ClientTableProps) {
     } else {
       params.set(key, value)
     }
+    try {
+      sessionStorage.setItem(CLIENT_FILTERS_KEY, JSON.stringify({
+        q: searchParams.get('q') ?? '',
+        status: searchParams.get('status') ?? 'all',
+        health: searchParams.get('health') ?? 'all',
+        badge: searchParams.get('badge') ?? 'all',
+        checkin: searchParams.get('checkin') ?? 'all',
+        [key]: value,
+      }))
+    } catch { /* ignore */ }
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }, [searchParams, router, pathname])
 
@@ -59,6 +97,16 @@ export function ClientTable({ clients }: ClientTableProps) {
       } else {
         params.set('q', value)
       }
+      try {
+        const current = new URLSearchParams(window.location.search)
+        sessionStorage.setItem(CLIENT_FILTERS_KEY, JSON.stringify({
+          q: value,
+          status: current.get('status') ?? 'all',
+          health: current.get('health') ?? 'all',
+          badge: current.get('badge') ?? 'all',
+          checkin: current.get('checkin') ?? 'all',
+        }))
+      } catch { /* ignore */ }
       replaceUrl(params)
     }, 300)
   }, [replaceUrl])
