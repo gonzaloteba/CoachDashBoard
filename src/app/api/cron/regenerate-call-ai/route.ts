@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { generateTranscriptSummary, generatePositiveHighlights, generateCoachActions } from '@/lib/transcript-ai'
+import { createAlertsFromCoachActions } from '@/lib/call-alerts'
 import { logger } from '@/lib/logger'
 
-export const maxDuration = 120
+export const maxDuration = 300
 
 const log = logger('api:cron:regenerate-call-ai')
 
@@ -12,12 +13,13 @@ const log = logger('api:cron:regenerate-call-ai')
  *
  * Finds calls that have a transcript but are missing AI-generated content
  * (summary, positive highlights, or coach actions) and regenerates them.
+ * After generating coach_actions, auto-creates followup alerts.
  *
- * This acts as a safety net: if AI generation failed during the initial
- * webhook sync (e.g. API key was missing or there was a transient error),
- * this cron job will pick up those calls and retry.
+ * This is the safety net: if AI generation failed during the initial
+ * webhook sync (e.g. API key was missing or transient error),
+ * this cron picks up those calls and retries.
  *
- * Runs every 30 minutes via Vercel Cron.
+ * Runs every 10 minutes via Vercel Cron.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -36,14 +38,14 @@ export async function POST(request: NextRequest) {
 
     const supabase = getAdminClient()
 
-    // Find calls with transcript but missing summary OR positive highlights
+    // Find ALL calls with transcript but missing summary OR positive highlights OR coach actions
     const { data: calls, error: fetchError } = await supabase
       .from('calls')
       .select('id, transcript, client_id')
       .not('transcript', 'is', null)
-      .or('transcript_summary.is.null,positive_highlights.is.null')
+      .or('transcript_summary.is.null,positive_highlights.is.null,coach_actions.is.null')
       .order('call_date', { ascending: false })
-      .limit(5)
+      .limit(20)
 
     if (fetchError) {
       log.error('Failed to fetch calls needing AI regeneration', { error: fetchError.message })
@@ -58,6 +60,7 @@ export async function POST(request: NextRequest) {
 
     let processed = 0
     let failed = 0
+    let alertsCreated = 0
 
     for (const call of calls) {
       try {
@@ -101,6 +104,12 @@ export async function POST(request: NextRequest) {
           } else {
             log.info('Successfully regenerated AI content for call', { callId: call.id, clientName })
             processed++
+
+            // Auto-create followup alerts from coach actions
+            if (actions && call.client_id) {
+              const count = await createAlertsFromCoachActions(supabase, call.client_id, call.id, actions, clientName)
+              alertsCreated += count
+            }
           }
         } else {
           log.warn('AI generation returned no content for call', { callId: call.id })
@@ -116,6 +125,7 @@ export async function POST(request: NextRequest) {
       success: true,
       processed,
       failed,
+      alerts_created: alertsCreated,
       total: calls.length,
     })
   } catch (error) {

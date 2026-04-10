@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Phone, Plus, ChevronDown, ChevronUp, FileText, Video, ExternalLink, ClipboardList, CheckCircle2, Loader2, Sparkles } from 'lucide-react'
+import { Phone, Plus, ChevronDown, ChevronUp, FileText, Video, ExternalLink, ClipboardList, CheckCircle2, Loader2, Sparkles, Clock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { cn, inputClass, textareaClass } from '@/lib/utils'
@@ -215,9 +215,9 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
                         </span>
                       )}
                       {!hasSummary && hasTranscript && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
-                          <FileText className="h-3 w-3" />
-                          Transcript
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                          <Clock className="h-3 w-3" />
+                          Procesando...
                         </span>
                       )}
                       {hasPositiveHighlights && (
@@ -281,18 +281,25 @@ export function CallsLog({ calls, clientId }: CallsLogProps) {
                     )}
                     {hasTranscript && (!hasSummary || !hasPositiveHighlights || !hasCoachActions) && (
                       <div className={cn(!call.meet_link && !call.notes && 'pt-3')}>
-                        <button
-                          onClick={() => handleRegenerateAI(call.id)}
-                          disabled={regeneratingAI === call.id}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50"
-                        >
-                          {regeneratingAI === call.id ? (
+                        {regeneratingAI === call.id ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs text-blue-600">
                             <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Sparkles className="h-3 w-3" />
-                          )}
-                          {regeneratingAI === call.id ? 'Generando...' : 'Generar resumen y acciones'}
-                        </button>
+                            Generando resumen...
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-3">
+                            <span className="inline-flex items-center gap-1.5 text-xs text-amber-600">
+                              <Clock className="h-3 w-3" />
+                              Procesamiento automatico pendiente
+                            </span>
+                            <button
+                              onClick={() => handleRegenerateAI(call.id)}
+                              className="text-[10px] text-muted-foreground underline hover:text-foreground"
+                            >
+                              Reintentar ahora
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                     {hasSummary && (

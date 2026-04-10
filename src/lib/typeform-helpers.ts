@@ -179,6 +179,48 @@ export function findClientInList(
         return { id: client.id }
       }
     }
+
+    // 2d. Any word from search appears in both first AND last name of a client (cross-field match)
+    // e.g. search "Carlos" + "" (no last name from Drive) matches DB "Carlos" + "Garcia"
+    if (normLn === '' && normFn.length >= 3) {
+      const searchWords = normFn.split(/\s+/)
+      if (searchWords.some(w => cFn.includes(w) || cLn.includes(w))) {
+        // Only if it's a unique match (first name matches exactly one client)
+        const allMatches = clients.filter(c2 => {
+          const c2Fn = removeAccents(c2.first_name || '').toLowerCase().trim()
+          return searchWords.some(w => c2Fn === w || c2Fn.startsWith(w))
+        })
+        if (allMatches.length === 1) {
+          log.info('Client matched by first-name-only (unique)', {
+            clientId: client.id,
+            searchedName: fn,
+            matchedName: `${client.first_name} ${client.last_name}`,
+            matchType: 'first-name-only',
+          })
+          return { id: client.id }
+        }
+      }
+    }
+
+    // 2e. Search words appear anywhere in the full name (handles flipped name order from Drive)
+    // e.g. search "Garcia Carlos" matches DB "Carlos" + "Garcia"
+    if (searchFull.length >= 5) {
+      const searchWords = searchFull.split(/\s+/)
+      const clientWords = cFull.split(/\s+/)
+      if (searchWords.length >= 2 && clientWords.length >= 2) {
+        const allSearchWordsFound = searchWords.every(sw => clientWords.some(cw => cw === sw || cw.startsWith(sw) || sw.startsWith(cw)))
+        const allClientWordsFound = clientWords.every(cw => searchWords.some(sw => sw === cw || sw.startsWith(cw) || cw.startsWith(sw)))
+        if (allSearchWordsFound || allClientWordsFound) {
+          log.info('Client matched by word overlap', {
+            clientId: client.id,
+            searchedName: `${fn} ${ln}`,
+            matchedName: `${client.first_name} ${client.last_name}`,
+            matchType: 'word-overlap',
+          })
+          return { id: client.id }
+        }
+      }
+    }
   }
 
   return null

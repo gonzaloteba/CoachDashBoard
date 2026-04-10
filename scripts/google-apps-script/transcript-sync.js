@@ -162,45 +162,78 @@ function extractDateFromFile(file) {
 /**
  * Try to extract client name from the transcript file name.
  *
- * Real Gemini filename formats observed:
+ * Known Gemini filename formats:
  *   "Marcel Despagne y Tony Tirado Zalud: 2026/03/20 14:32 CST - Notas de Gemini"
  *   "La reunión se inició a las 2026/03/20 15:01 CST - Notas de Gemini"
  *   "Davide x Tony Zalud: 2026/03/03 12:11 CST - Notas de Gemini"
+ *   "Carlos Garcia y Tony Zalud"  (newer, cleaner format)
+ *   "Carlos Garcia y Tony Zalud - Notas de Gemini"
+ *   "Carlos Garcia - Tony Zalud"
  *
- * Strategy: extract the first participant name (before " y " or " x "),
- * ignoring the coach name (Tony/Admisiones) and the date/Gemini suffix.
+ * Strategy: clean suffixes, split by separator to get participants,
+ * identify client (non-coach) participant.
  */
 function extractClientName(fileName) {
-  // Remove "- Notas de Gemini" suffix
-  let cleaned = fileName.replace(/\s*-\s*Notas de Gemini\s*$/i, '').trim();
+  // Remove common suffixes (order matters — most specific first)
+  var cleaned = fileName
+    .replace(/\s*-\s*Notas de Gemini\s*$/i, '')
+    .replace(/\s*-\s*Gemini Notes\s*$/i, '')
+    .replace(/\s*Notas de Gemini\s*$/i, '')
+    .trim();
 
-  // Remove date suffix like ": 2026/03/20 14:32 CST"
-  cleaned = cleaned.replace(/:\s*\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}\s+\w+\s*$/, '').trim();
+  // Remove date suffix in various formats
+  // "...: 2026/03/20 14:32 CST" or "...: 2026-03-20 14:32" or just trailing date
+  cleaned = cleaned
+    .replace(/[:\-]\s*\d{4}[\/\-]\d{2}[\/\-]\d{2}\s+\d{2}:\d{2}(?:\s+\w+)?\s*$/, '')
+    .replace(/\s+\d{4}[\/\-]\d{2}[\/\-]\d{2}\s*$/, '')
+    .trim();
 
   // Skip files that start with "La reunión se inició" — no client name
   if (/^La reunión se inició/i.test(cleaned)) {
     return { firstName: null, lastName: null };
   }
 
-  // Split by " y " or " x " to separate participants
-  const participants = cleaned.split(/\s+[yx]\s+/i);
+  // Known coach names (lowercase) to identify which participant is the client
+  var coachNames = ['tony', 'antonio', 'tirado', 'zalud', 'admisiones', 'andrés', 'andres'];
 
-  // First participant is the client (second is typically the coach)
-  const clientPart = (participants[0] || '').trim();
+  // Split by common separators: " y ", " x ", " - ", " & ", " con "
+  var participants = cleaned.split(/\s+(?:y|x|&|con)\s+|\s+-\s+/i);
 
-  if (!clientPart || clientPart.length < 2) {
-    return { firstName: null, lastName: null };
+  // Find the first participant that is NOT a coach
+  for (var i = 0; i < participants.length; i++) {
+    var part = participants[i].trim();
+    if (!part || part.length < 2) continue;
+
+    // Check if this participant contains a coach name
+    var partLower = part.toLowerCase();
+    var isCoach = false;
+    for (var j = 0; j < coachNames.length; j++) {
+      if (partLower.indexOf(coachNames[j]) !== -1) {
+        isCoach = true;
+        break;
+      }
+    }
+
+    if (!isCoach) {
+      var parts = part.split(/\s+/);
+      return {
+        firstName: parts[0] || null,
+        lastName: parts.slice(1).join(' ') || null,
+      };
+    }
   }
 
-  const parts = clientPart.split(/\s+/);
-  if (parts.length >= 2) {
+  // Fallback: if all participants matched coach names, use the first one anyway
+  var fallback = (participants[0] || '').trim();
+  if (fallback && fallback.length >= 2) {
+    var parts = fallback.split(/\s+/);
     return {
-      firstName: parts[0],
-      lastName: parts.slice(1).join(' '),
+      firstName: parts[0] || null,
+      lastName: parts.slice(1).join(' ') || null,
     };
   }
 
-  return { firstName: parts[0] || null, lastName: null };
+  return { firstName: null, lastName: null };
 }
 
 // ============================================

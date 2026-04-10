@@ -3,6 +3,7 @@ import { getAdminClient } from '@/lib/supabase/admin'
 import { getDefaultCoachId } from '@/lib/auth'
 import { findClientByName } from '@/lib/typeform-helpers'
 import { generateCoachActions, generateTranscriptSummary, generatePositiveHighlights, ApiKeyMissingError } from '@/lib/transcript-ai'
+import { createAlertsFromCoachActions } from '@/lib/call-alerts'
 import { logger } from '@/lib/logger'
 
 // Allow up to 60s for AI generation + DB operations
@@ -155,6 +156,11 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      // Auto-create alerts from coach actions
+      if (ai.actions && body.client_id) {
+        await createAlertsFromCoachActions(supabase, body.client_id, existingCall.id, ai.actions, clientNameForUpdate)
+      }
+
       return NextResponse.json({
         success: true,
         action: 'transcript_updated',
@@ -300,6 +306,11 @@ export async function POST(request: NextRequest) {
         } catch (e) {
           console.warn('Alert resolution failed (non-critical):', (e as Error).message)
         }
+
+        // Auto-create alerts from coach actions
+        if (ai.actions) {
+          await createAlertsFromCoachActions(supabase, clientId, scheduledCall.id, ai.actions, clientName)
+        }
       }
 
       return NextResponse.json({
@@ -363,6 +374,11 @@ export async function POST(request: NextRequest) {
           .eq('is_resolved', false)
       } catch (e) {
         console.warn('Alert resolution failed (non-critical):', (e as Error).message)
+      }
+
+      // Auto-create alerts from coach actions
+      if (ai.actions) {
+        await createAlertsFromCoachActions(supabase, clientId, newCall.id, ai.actions, clientName)
       }
     }
 
