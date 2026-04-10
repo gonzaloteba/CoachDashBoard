@@ -65,7 +65,7 @@ export default async function DashboardPage({ searchParams }: Props) {
     clientsQuery.or(`coach_id.eq.${filterCoachId},coach_id.is.null`)
   }
 
-  const allClientsQuery = supabase.from('clients').select('status').in('status', ['active', 'completed', 'cancelled'])
+  const allClientsQuery = supabase.from('clients').select('status, is_renewed, renewal_date').in('status', ['active', 'completed', 'cancelled'])
   if (filterCoachId) {
     allClientsQuery.or(`coach_id.eq.${filterCoachId},coach_id.is.null`)
   }
@@ -173,6 +173,11 @@ export default async function DashboardPage({ searchParams }: Props) {
   const cancelled = allClients?.filter((c) => c.status === 'cancelled').length || 0
   const retentionRate = total > 0 ? Math.round(((total - cancelled) / total) * 100) : 100
 
+  // Renewal rate: of clients past their renewal_date (day 75), how many renewed?
+  const eligible = (allClients || []).filter((c) => c.renewal_date && new Date(c.renewal_date) <= now)
+  const renewed = eligible.filter((c) => c.is_renewed)
+  const renewalRate = eligible.length > 0 ? Math.round((renewed.length / eligible.length) * 100) : 0
+
   // Resolve client names for upcoming calls
   const clientMap = new Map(activeClients.map(c => [c.id, { first_name: c.first_name, last_name: c.last_name }]))
   const upcomingCalls = rawUpcomingCalls
@@ -198,6 +203,7 @@ export default async function DashboardPage({ searchParams }: Props) {
           checkinsOnTime={recentCheckinClientIds.size}
           expectedCheckins={activeClients.length}
           retentionRate={retentionRate}
+          renewalRate={renewalRate}
           coachId={filterCoachId}
         />
 

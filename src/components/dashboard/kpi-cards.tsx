@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Users, ClipboardCheck, TrendingUp, ArrowRight } from 'lucide-react'
+import { Users, ClipboardCheck, TrendingUp, RefreshCw, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface KpiCardProps {
@@ -53,6 +53,7 @@ interface KpiCardsProps {
   checkinsOnTime: number
   expectedCheckins: number
   retentionRate: number
+  renewalRate: number
   coachId?: string | null
 }
 
@@ -61,6 +62,7 @@ export function KpiCards({
   checkinsOnTime,
   expectedCheckins,
   retentionRate,
+  renewalRate,
   coachId,
 }: KpiCardsProps) {
   const checkinRate = expectedCheckins > 0
@@ -70,7 +72,7 @@ export function KpiCards({
   const coachSuffix = coachId ? `&coach=${coachId}` : ''
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <KpiCard
         title="Clientes Activos"
         value={activeClients}
@@ -88,6 +90,11 @@ export function KpiCards({
         title="Tasa de Retención"
         value={`${retentionRate}%`}
         icon={<TrendingUp className="h-4 w-4 text-muted-foreground" />}
+      />
+      <KpiCard
+        title="Tasa de Renovación"
+        value={`${renewalRate}%`}
+        icon={<RefreshCw className="h-4 w-4 text-muted-foreground" />}
       />
     </div>
   )
