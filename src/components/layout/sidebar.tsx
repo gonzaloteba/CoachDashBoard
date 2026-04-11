@@ -10,10 +10,13 @@ import {
   User,
   LinkIcon,
   UserCog,
+  Moon,
+  Sun,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { useTheme } from '@/components/theme-provider'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -34,6 +37,7 @@ export function Sidebar({ coachName, coachRole }: SidebarProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const router = useRouter()
+  const { theme, toggleTheme } = useTheme()
 
   // Preserve coach filter param for admin navigation
   const coachParam = searchParams.get('coach')
@@ -112,6 +116,13 @@ export function Sidebar({ coachName, coachRole }: SidebarProps) {
             </div>
           </div>
         )}
+        <button
+          onClick={toggleTheme}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          {theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+        </button>
         <button
           onClick={handleLogout}
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"

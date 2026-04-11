@@ -119,12 +119,14 @@ export default function LoginPage() {
         {showForgot ? (
           <form onSubmit={handleForgotPassword} className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium mb-1.5">
+              <label htmlFor="forgot-email" className="block text-sm font-medium mb-1.5">
                 Email
               </label>
               <input
-                id="email"
+                id="forgot-email"
+                name="email"
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="tu@email.com"
@@ -158,14 +160,16 @@ export default function LoginPage() {
             </button>
           </form>
         ) : (
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4" autoComplete="on">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium mb-1.5">
+              <label htmlFor="login-email" className="block text-sm font-medium mb-1.5">
                 Email
               </label>
               <input
-                id="email"
+                id="login-email"
+                name="email"
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="tu@email.com"
@@ -175,12 +179,14 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium mb-1.5">
+              <label htmlFor="login-password" className="block text-sm font-medium mb-1.5">
                 Contraseña
               </label>
               <input
-                id="password"
+                id="login-password"
+                name="password"
                 type="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
