@@ -88,14 +88,11 @@ export async function persistPhoto(
         return tempUrl
       }
 
-      let buffer = Buffer.from(await response.arrayBuffer())
-      let contentType = response.headers.get('content-type') || 'image/jpeg'
+      const rawBuffer = Buffer.from(await response.arrayBuffer())
+      const rawContentType = response.headers.get('content-type') || 'image/jpeg'
 
-      // Convert HEIC/HEIF to JPEG (browsers cannot display these formats)
-      if (NEEDS_CONVERSION.some((t) => contentType.includes(t))) {
-        buffer = Buffer.from(await heicConvert({ buffer, format: 'JPEG', quality: 0.85 }))
-        contentType = 'image/jpeg'
-      }
+      // Convert HEIC/HEIF to JPEG using both content-type and magic-byte detection
+      const { buffer, contentType } = await convertHeicBufferIfNeeded(rawBuffer, rawContentType)
 
       // Determine file extension from content type
       const ext = contentType.includes('png') ? 'png'
