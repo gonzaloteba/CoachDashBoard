@@ -91,7 +91,8 @@ CREATE TABLE IF NOT EXISTS clients (
   energy_dips TEXT,
   onboarding_notes TEXT,
   onboarding_submitted_at TIMESTAMPTZ,
-  initial_photo_url TEXT
+  initial_photo_url TEXT,
+  paused_at DATE
 );
 
 -- =============================================

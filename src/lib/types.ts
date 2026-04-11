@@ -52,6 +52,7 @@ export interface Client {
   sleep_hours_avg: string | null
   energy_level_initial: number | null
   stress_level_initial: number | null
+  paused_at: string | null
   initial_photo_url: string | null
   wake_time: string | null
   bed_time: string | null

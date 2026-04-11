@@ -52,9 +52,85 @@ export function StatusDropdown({ clientId, currentStatus, size = 'sm' }: StatusD
     setOpen(false)
 
     const supabase = createClient()
+
+    // When pausing: save today's date as paused_at
+    if (newStatus === 'paused') {
+      const today = new Date().toISOString().split('T')[0]
+      const { error } = await supabase
+        .from('clients')
+        .update({ status: newStatus, paused_at: today })
+        .eq('id', clientId)
+
+      if (error) {
+        setStatus(previousStatus)
+        toast(`Error al cambiar el estado: ${error.message}`, 'error')
+      } else {
+        toast(`Estado cambiado a ${STATUS_LABELS[newStatus]}`, 'success')
+        router.refresh()
+      }
+      setLoading(false)
+      return
+    }
+
+    // When reactivating from paused: extend end_date by paused days
+    if (previousStatus === 'paused' && newStatus === 'active') {
+      const { data: client, error: fetchError } = await supabase
+        .from('clients')
+        .select('paused_at, end_date')
+        .eq('id', clientId)
+        .single()
+
+      if (fetchError || !client?.paused_at) {
+        // Fallback: just update status without extending dates
+        const { error } = await supabase
+          .from('clients')
+          .update({ status: newStatus, paused_at: null })
+          .eq('id', clientId)
+
+        if (error) {
+          setStatus(previousStatus)
+          toast(`Error al cambiar el estado: ${error.message}`, 'error')
+        } else {
+          toast(`Estado cambiado a ${STATUS_LABELS[newStatus]}`, 'success')
+          router.refresh()
+        }
+        setLoading(false)
+        return
+      }
+
+      const pausedAt = new Date(client.paused_at + 'T00:00:00')
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const pausedDays = Math.max(1, Math.round((today.getTime() - pausedAt.getTime()) / (1000 * 60 * 60 * 24)))
+
+      let updateData: Record<string, unknown> = { status: newStatus, paused_at: null }
+
+      if (client.end_date) {
+        const endDate = new Date(client.end_date + 'T00:00:00')
+        endDate.setDate(endDate.getDate() + pausedDays)
+        updateData.end_date = endDate.toISOString().split('T')[0]
+      }
+
+      const { error } = await supabase
+        .from('clients')
+        .update(updateData)
+        .eq('id', clientId)
+
+      if (error) {
+        setStatus(previousStatus)
+        toast(`Error al cambiar el estado: ${error.message}`, 'error')
+      } else {
+        toast(`Reactivado. Programa extendido ${pausedDays} día${pausedDays !== 1 ? 's' : ''} por la pausa.`, 'success')
+        router.refresh()
+      }
+      setLoading(false)
+      return
+    }
+
+    // Default: just update status (for other transitions like active -> completed)
     const { error } = await supabase
       .from('clients')
-      .update({ status: newStatus })
+      .update({ status: newStatus, paused_at: null })
       .eq('id', clientId)
 
     if (error) {
