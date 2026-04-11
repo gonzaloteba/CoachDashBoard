@@ -36,7 +36,7 @@ export function ProgressCharts({ checkIns }: ProgressChartsProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="grid gap-6 lg:grid-cols-2">
       {/* Peso */}
       <div className="rounded-xl border bg-card p-6 shadow-sm">
         <h3 className="mb-4 text-sm font-medium text-muted-foreground">

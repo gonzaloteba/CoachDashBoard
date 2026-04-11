@@ -58,14 +58,7 @@ export function ClientDetailTabs({
         <div className="space-y-6">
           <ClientProfileSummary client={client} />
 
-          <div className="grid gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-              <ProgressCharts checkIns={checkIns} />
-            </div>
-            <div className="space-y-6">
-              <TrainingPlanCard plans={trainingPlans} clientId={clientId} />
-            </div>
-          </div>
+          <ProgressCharts checkIns={checkIns} />
         </div>
       )}
 
